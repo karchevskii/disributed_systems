@@ -36,10 +36,10 @@ engine = create_async_engine(str(settings.DATABASE_URI), pool_pre_ping=True)
 session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
 
-async def get_async_master_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with session_maker() as session:
         yield session
 
 
-async def get_user_db(session: AsyncSession = Depends(get_async_master_session)):
+async def get_user_db(session: AsyncSession = Depends(get_async_session)):
     yield SQLAlchemyUserDatabase(session, User, OAuthAccount)

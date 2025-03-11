@@ -1,0 +1,13 @@
+name: dev-users-microservice
+
+services:
+  db1:
+    image: postgres
+    restart: always
+    env_file:
+      - ./devdb.env
+    ports:
+      - 5432:5432
+
+volumes:
+  postgresql_master_data:

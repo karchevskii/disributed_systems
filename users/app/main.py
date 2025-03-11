@@ -10,17 +10,13 @@ from app.users import (
     fastapi_users,
     github_oauth_client,
 )
+from app.api import router
 from app.exceptions.handlers import all_exception_handlers
 
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-app.include_router(
-    fastapi_users.get_verify_router(UserRead),
-    prefix="/auth",
-    tags=["auth"],
-)
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
     prefix="/users",
@@ -36,6 +32,7 @@ app.include_router(
     prefix="/auth/github",
     tags=["auth"],
 )
+app.include_router(router)
 
 
 @app.get("/auth/check-auth")
