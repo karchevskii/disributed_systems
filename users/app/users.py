@@ -31,9 +31,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = settings.SECRET
     verification_token_secret = settings.SECRET
 
-    def __init__(self, user_db: SQLAlchemyUserDatabase, user_read_only_db: SQLAlchemyUserDatabase):
+    def __init__(self,
+                 user_db: SQLAlchemyUserDatabase,
+                 user_read_only_db: SQLAlchemyUserDatabase
+                 ):
+        # self.user_db = user_db
         self.user_read_only_db = user_read_only_db
-        self.user_db = user_db
+        super().__init__(user_db)
 
     async def get(self, id: models.ID) -> models.UP:
         """
@@ -58,7 +62,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 except Exception as e:
                     # The read-only db is also down.
                     print("read only db down")
-                    raise AuthServiceError("We are experiencing technical difficulties. Please try again later.")
+                    raise AuthServiceError(
+                        "We are experiencing technical difficulties. Please try again later.")
 
         if user is None:
             raise exceptions.UserNotExists()
@@ -81,10 +86,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
 
 async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db), user_read_only_db: SQLAlchemyUserDatabase = Depends(get_user_read_only_db)):
-    yield UserManager(user_db, user_read_only_db)
+    yield UserManager(
+        user_db,
+        user_read_only_db
+    )
 
 
-cookie_transport = CookieTransport(cookie_max_age=604800)  # 1 week
+cookie_transport = CookieTransport(
+    cookie_name="tictactoe", cookie_max_age=604800)  # 1 week
 
 
 def get_jwt_strategy() -> JWTStrategy[models.UP, models.ID]:

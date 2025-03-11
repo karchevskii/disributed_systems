@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     GITHUB_OAUTH_CLIENT_ID: str = ""
     GITHUB_OAUTH_CLIENT_SECRET: str = ""
     ON_SUCCESS_REDIRECT_URL: str = "https://magpie-liberal-heavily.ngrok-free.app/authenticated-route"
+    CALLBACK_URL: str = "https://magpie-liberal-heavily.ngrok-free.app/auth/github/callback"
 
 
     # Logging

@@ -30,6 +30,7 @@ app.include_router(
     get_oauth_router(oauth_client=github_oauth_client,
                                    backend=auth_backend,
                                    state_secret=settings.SECRET,
+                                   redirect_url=settings.CALLBACK_URL,
                                    get_user_manager=fastapi_users.get_user_manager,
                                    is_verified_by_default=True),
     prefix="/auth/github",

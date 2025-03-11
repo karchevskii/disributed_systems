@@ -6,7 +6,7 @@ services:
     build:
       context: .
     env_file:
-      - ./.env
+      - ./docker.env
     restart: always
     depends_on:
       - postgresql-master
@@ -16,7 +16,7 @@ services:
   postgresql-master:
     image: docker.io/bitnami/postgresql:17
     ports:
-      - '5432:5432'
+      - '5432'
     volumes:
       - 'postgresql_master_data:/bitnami/postgresql'
     env_file:
@@ -27,7 +27,7 @@ services:
   postgresql-slave:
     image: docker.io/bitnami/postgresql:17
     ports:
-      - '5433:5432'
+      - '5433'
     depends_on:
       - postgresql-master
     env_file:

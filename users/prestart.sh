@@ -7,7 +7,7 @@ apt-get update
 apt-get install -y netcat-openbsd 
 
 # Check PostgreSQL connection
-while ! nc -z db1 5432; do
+while ! nc -z postgresql-master 5432; do
     sleep 0.1
 done
 echo "PostgreSQL started"
