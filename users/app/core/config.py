@@ -4,14 +4,11 @@ from typing import Annotated, Any, Literal
 from pydantic import (
     AnyUrl,
     BeforeValidator,
-    EmailStr,
     PostgresDsn,
     computed_field,
-    model_validator,
 )
 from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing_extensions import Self
 
 
 def parse_cors(v: Any) -> list[str] | str:
@@ -95,7 +92,7 @@ class Settings(BaseSettings):
     MODULE_PROPAGATE: bool = False
 
     model_config = SettingsConfigDict(
-        env_file=".env.local", env_ignore_empty=True, extra="ignore"
+        env_file=".env", env_ignore_empty=True, extra="ignore"
     )
 
 settings = Settings()  # type: ignore

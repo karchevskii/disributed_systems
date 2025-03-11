@@ -9,28 +9,42 @@ services:
       - ./.env
     restart: always
     depends_on:
-      - db1
+      - postgresql-master
     ports:
       - 8000:8000
 
-  db1:
-    image: postgres
+  postgresql-master:
+    image: docker.io/bitnami/postgresql:17
+    ports:
+      - '5432:5432'
     volumes:
-      - /home/api/postgres/postgres_data_prod:/var/lib/postgresql/data/
-    restart: always
+      - 'postgresql_master_data:/bitnami/postgresql'
     env_file:
-      - ./db.env
+      - db_repl.env
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=master
+
+  postgresql-slave:
+    image: docker.io/bitnami/postgresql:17
+    ports:
+      - '5433:5432'
+    depends_on:
+      - postgresql-master
+    env_file:
+      - db_repl.env
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=slave
 
   adminer:
     image: adminer
     restart: always
     depends_on:
-      - db1
+      - postgresql-master
     environment:
       - ADMINER_DESIGN=pepa-linha-dark
     ports:
       - 8080:8080
 
 volumes:
-  postgres_data_prod:
-  mongo-data-prod:
+  postgresql_master_data:
+    driver: local

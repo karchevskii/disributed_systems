@@ -1,10 +1,10 @@
 from fastapi import Depends, FastAPI
 
-from oauth_route import get_oauth_router
-from db.db import User
-from core.config import settings
-from schemas import UserCreate, UserRead, UserUpdate
-from users import (
+from app.oauth_route import get_oauth_router
+from app.db.db import User
+from app.core.config import settings
+from app.schemas import UserRead, UserUpdate
+from app.users import (
     auth_backend,
     current_active_user,
     fastapi_users,
@@ -12,7 +12,6 @@ from users import (
 )
 
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
 
 app = FastAPI()
 

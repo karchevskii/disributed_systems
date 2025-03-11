@@ -12,9 +12,9 @@ from fastapi_users.db import SQLAlchemyUserDatabase
 from httpx_oauth.clients.github import GitHubOAuth2
 from fastapi_users import exceptions
 
-from db.db import get_user_db, User
-from core.config import settings
-from core.logger import get_logger
+from app.db.db import get_user_db, User
+from app.core.config import settings
+from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 

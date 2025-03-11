@@ -13,7 +13,7 @@ from fastapi_users.exceptions import UserAlreadyExists
 from fastapi_users.jwt import SecretType, decode_jwt, generate_jwt
 from fastapi_users.manager import BaseUserManager, UserManagerDependency
 from fastapi_users.router.common import ErrorCode, ErrorModel
-from core.config import settings
+from app.core.config import settings
 
 STATE_TOKEN_AUDIENCE = "fastapi-users:oauth-state"
 
