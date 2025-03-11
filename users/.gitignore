@@ -165,6 +165,7 @@ images/
 *.env*
 logs
 .vscode/
+.env.local
 !example.env
 !example.db.env
 !example.mongodb.env
