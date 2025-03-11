@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from core.config import settings
 
-from db.db import Base, User, OAuthAccount
+from app.db import Base, User, OAuthAccount
 
 config = context.config
 

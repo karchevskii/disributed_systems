@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI
 
 from app.oauth_route import get_oauth_router
-from app.db.db import User
+from app.db import User
 from app.core.config import settings
 from app.schemas import UserRead, UserUpdate
 from app.users import (
@@ -10,6 +10,7 @@ from app.users import (
     fastapi_users,
     github_oauth_client,
 )
+from app.exceptions.handlers import all_exception_handlers
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -57,3 +58,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+for exc, handler in all_exception_handlers.items():
+    app.add_exception_handler(exc, handler)

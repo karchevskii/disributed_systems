@@ -38,11 +38,19 @@ replica_engine = create_async_engine(str(settings.DATABASE_REPLICA_URI), pool_pr
 master_session_maker = async_sessionmaker(master_engine, expire_on_commit=False)
 replica_session_maker = async_sessionmaker(replica_engine, expire_on_commit=False)
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_master_session() -> AsyncGenerator[AsyncSession, None]:
     async with master_session_maker() as session:
         yield session
 
-async def get_user_db(session: AsyncSession = Depends(get_async_session)):
+async def get_async_replica_session() -> AsyncGenerator[AsyncSession, None]:
+    async with replica_session_maker() as session:
+        yield session
+
+
+async def get_user_db(session: AsyncSession = Depends(get_async_master_session)):
+    yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
+
+async def get_user_read_only_db(session: AsyncSession = Depends(get_async_replica_session)):
     yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
 
 # async def get_async_session(use_replica: bool = False) -> AsyncGenerator[AsyncSession, None]:
