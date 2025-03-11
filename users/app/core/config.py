@@ -24,12 +24,7 @@ def parse_cors(v: Any) -> list[str] | str:
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Distributed TicTacToe"
-    SECRET_KEY: str = secrets.token_urlsafe(32)
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    # 60 minutes * 24 hours * 7 days = 7 days
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 60 * 24 * 7
-    JWT_ALGORITHM: str = "HS256"
-    JWT_SECRET: str = ""
+    SECRET: str = secrets.token_urlsafe(32)
 
     DOMAIN: str = "localhost"
     ENVIRONMENT: Literal["local", "staging", "production", "test"] = "local"
@@ -54,7 +49,7 @@ class Settings(BaseSettings):
 
     @computed_field  # type: ignore[misc]
     @property
-    def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
+    def DATABASE_MASTER_URI(self) -> PostgresDsn:
         return MultiHostUrl.build(
             scheme="postgresql+asyncpg",
             username=self.POSTGRES_USER,
@@ -63,51 +58,29 @@ class Settings(BaseSettings):
             port=self.POSTGRES_PORT,
             path=self.POSTGRES_DB,
         )
-
-    MONGODB_SERVER: str = "localhost"
-    MONGODB_PORT: int = 27017
-    MONGODB_USER: str = ""
-    MONGODB_PASSWORD: str
-    MONGODB_DB: str = ""
-
-    @computed_field  # type: ignore[misc]
-    @property
-    def MONGODB_URI(self) -> str:
-        return f"mongodb://{self.MONGODB_USER}:{self.MONGODB_PASSWORD}@{self.MONGODB_SERVER}:{self.MONGODB_PORT}/{self.MONGODB_DB}"
-
-    SMTP_TLS: bool = True
-    SMTP_SSL: bool = False
-    SMTP_PORT: int = 587
-    SMTP_HOST: str | None = None
-    SMTP_USER: str | None = None
-    SMTP_PASSWORD: str | None = None
-    EMAILS_FROM_EMAIL: EmailStr | None = None
-    EMAILS_FROM_NAME: str | None = None
-
-    DEVICE_TYPES: list[str] = ["ios", "android", "web"]
-
-    @model_validator(mode="after")
-    def _set_default_emails_from(self) -> Self:
-        if not self.EMAILS_FROM_NAME:
-            self.EMAILS_FROM_NAME = self.PROJECT_NAME
-        return self
-
-    EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 2
-    DELETE_UNVERIFIED_USERS_OLDER_THAN_HOURS: int = 24
-    DELETE_EXPIRED_REFRESH_TOKENS_EVERY_MINUTES: int = 120
-    ACCESS_TOKEN_EXPIRES_MINUTES: int = 15
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 60 * 24 * 7
-
+    
+    POSTGRES_REPL_SERVER: str = "localhost"
+    POSTGRES_REPL_PORT: int = 5433
+    POSTGRES_USER: str = ""
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str = ""
 
     @computed_field  # type: ignore[misc]
     @property
-    def emails_enabled(self) -> bool:
-        return bool(self.SMTP_HOST and self.EMAILS_FROM_EMAIL)
+    def DATABASE_REPLICA_URI(self) -> PostgresDsn:
+        return MultiHostUrl.build(
+            scheme="postgresql+asyncpg",
+            username=self.POSTGRES_USER,
+            password=self.POSTGRES_PASSWORD,
+            host=self.POSTGRES_REPL_SERVER,
+            port=self.POSTGRES_REPL_PORT,
+            path=self.POSTGRES_DB,
+        )
+    
+    GITHUB_OAUTH_CLIENT_ID: str = ""
+    GITHUB_OAUTH_CLIENT_SECRET: str = ""
+    ON_SUCCESS_REDIRECT_URL: str = "https://magpie-liberal-heavily.ngrok-free.app/authenticated-route"
 
-
-    AZURE_ENDPOINT: str = ""
-    AZURE_KEY: str = ""
-    ACCEPTED_FILE_FORMATS: list[str] = [b"image/jpeg", b"image/png", b"image/jpg"]
 
     # Logging
     LOG_FILE_PATH: str = "logs/app.log"
@@ -122,8 +95,7 @@ class Settings(BaseSettings):
     MODULE_PROPAGATE: bool = False
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_ignore_empty=True, extra="ignore"
+        env_file=".env.local", env_ignore_empty=True, extra="ignore"
     )
-
 
 settings = Settings()  # type: ignore

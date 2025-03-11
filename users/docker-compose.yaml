@@ -1,4 +1,5 @@
 version: "3.8"
+name: users-microservice
 
 services:
   api:
@@ -9,7 +10,6 @@ services:
     restart: always
     depends_on:
       - db1
-      - mongo1
     ports:
       - 8000:8000
 
@@ -30,25 +30,6 @@ services:
       - ADMINER_DESIGN=pepa-linha-dark
     ports:
       - 8080:8080
-
-  mongo1:
-    image: mongo
-    restart: always
-    env_file:
-      - ./mongodb.env
-    volumes:
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
-      - /home/api/mongodb/mongo-data-prod:/data/db
-
-  mongo-express:
-    image: mongo-express
-    restart: always
-    ports:
-      - 8081:8081
-    env_file:
-      - ./mongo-express.env
-    depends_on:
-      - mongo1
 
 volumes:
   postgres_data_prod:

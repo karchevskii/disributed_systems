@@ -2,7 +2,7 @@ import logging
 import logging.config
 from pathlib import Path
 
-from app.core.config import settings
+from core.config import settings
 
 LOG_FILE_PATH = Path(settings.LOG_FILE_PATH)
 
