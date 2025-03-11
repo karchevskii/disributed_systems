@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     @computed_field  # type: ignore[misc]
     @property
-    def DATABASE_MASTER_URI(self) -> PostgresDsn:
+    def DATABASE_URI(self) -> PostgresDsn:
         return MultiHostUrl.build(
             scheme="postgresql+asyncpg",
             username=self.POSTGRES_USER,
@@ -55,25 +55,7 @@ class Settings(BaseSettings):
             port=self.POSTGRES_PORT,
             path=self.POSTGRES_DB,
         )
-    
-    POSTGRES_REPL_SERVER: str = "localhost"
-    POSTGRES_REPL_PORT: int = 5433
-    POSTGRES_USER: str = ""
-    POSTGRES_PASSWORD: str
-    POSTGRES_DB: str = ""
 
-    @computed_field  # type: ignore[misc]
-    @property
-    def DATABASE_REPLICA_URI(self) -> PostgresDsn:
-        return MultiHostUrl.build(
-            scheme="postgresql+asyncpg",
-            username=self.POSTGRES_USER,
-            password=self.POSTGRES_PASSWORD,
-            host=self.POSTGRES_REPL_SERVER,
-            port=self.POSTGRES_REPL_PORT,
-            path=self.POSTGRES_DB,
-        )
-    
     GITHUB_OAUTH_CLIENT_ID: str = ""
     GITHUB_OAUTH_CLIENT_SECRET: str = ""
     ON_SUCCESS_REDIRECT_URL: str = "https://magpie-liberal-heavily.ngrok-free.app/authenticated-route"

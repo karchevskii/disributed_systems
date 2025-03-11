@@ -9,11 +9,9 @@ from fastapi_users.authentication import (
     JWTStrategy,
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
-from fastapi_users import exceptions
 from httpx_oauth.clients.github import GitHubOAuth2
 
-from app.exceptions.exceptions import AuthServiceError
-from app.db import get_user_db, get_user_read_only_db, User
+from app.db import get_user_db, User
 from app.core.config import settings
 from app.core.logger import get_logger
 
@@ -31,43 +29,43 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = settings.SECRET
     verification_token_secret = settings.SECRET
 
-    def __init__(self,
-                 user_db: SQLAlchemyUserDatabase,
-                 user_read_only_db: SQLAlchemyUserDatabase
-                 ):
-        # self.user_db = user_db
-        self.user_read_only_db = user_read_only_db
-        super().__init__(user_db)
+    # def __init__(self,
+    #              user_db: SQLAlchemyUserDatabase,
+    #              user_read_only_db: SQLAlchemyUserDatabase
+    #              ):
+    #     # self.user_db = user_db
+    #     self.user_read_only_db = user_read_only_db
+    #     super().__init__(user_db)
 
-    async def get(self, id: models.ID) -> models.UP:
-        """
-        Get a user by id.
+    # async def get(self, id: models.ID) -> models.UP:
+    #     """
+    #     Get a user by id.
 
-        :param id: Id. of the user to retrieve.
-        :raises UserNotExists: The user does not exist.
-        :return: A user.
-        """
-        print("id", id)
-        user = None
-        try:
-            user = await self.user_db.get(id)
-            print("main db")
-        except Exception as e:
-            if isinstance(e, OSError):
-                print("OSError")
-                # If a main db is down, try to get the user from the read-only db.
-                try:
-                    user = await self.user_read_only_db.get(id)
-                    print("read only db")
-                except Exception as e:
-                    # The read-only db is also down.
-                    print("read only db down")
-                    raise AuthServiceError(
-                        "We are experiencing technical difficulties. Please try again later.")
+    #     :param id: Id. of the user to retrieve.
+    #     :raises UserNotExists: The user does not exist.
+    #     :return: A user.
+    #     """
+    #     print("id", id)
+    #     user = None
+    #     try:
+    #         user = await self.user_db.get(id)
+    #         print("main db")
+    #     except Exception as e:
+    #         if isinstance(e, OSError):
+    #             print("OSError")
+    #             # If a main db is down, try to get the user from the read-only db.
+    #             try:
+    #                 user = await self.user_read_only_db.get(id)
+    #                 print("read only db")
+    #             except Exception as e:
+    #                 # The read-only db is also down.
+    #                 print("read only db down")
+    #                 raise AuthServiceError(
+    #                     "We are experiencing technical difficulties. Please try again later.")
 
-        if user is None:
-            raise exceptions.UserNotExists()
-        return user
+    #     if user is None:
+    #         raise exceptions.UserNotExists()
+    #     return user
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
         logger.info(f"User {user.id} has registered.")
@@ -85,11 +83,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             f"Verification requested for user {user.id}. Verification token: {token}")
 
 
-async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db), user_read_only_db: SQLAlchemyUserDatabase = Depends(get_user_read_only_db)):
-    yield UserManager(
-        user_db,
-        user_read_only_db
-    )
+async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db)):
+    yield UserManager(user_db)
 
 
 cookie_transport = CookieTransport(

@@ -7,10 +7,12 @@ apt-get update
 apt-get install -y netcat-openbsd 
 
 # Check PostgreSQL connection
-while ! nc -z postgresql-master 5432; do
-    sleep 0.1
+while ! nc -z haproxy 5432; do
+    sleep 1
 done
 echo "PostgreSQL started"
+
+sleep 30
 
 echo "Run migrations"
 alembic upgrade head

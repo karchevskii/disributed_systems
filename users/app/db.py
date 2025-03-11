@@ -13,6 +13,8 @@ from fastapi_users.db import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, relationship
+
+
 class Base(DeclarativeBase):
     created_at: Mapped[datetime.datetime] = mapped_column(
         server_default=text("TIMEZONE('utc', now())"))
@@ -30,35 +32,14 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
 
 
+engine = create_async_engine(str(settings.DATABASE_URI), pool_pre_ping=True)
+session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
-
-master_engine = create_async_engine(str(settings.DATABASE_MASTER_URI), pool_pre_ping=True)
-replica_engine = create_async_engine(str(settings.DATABASE_REPLICA_URI), pool_pre_ping=True)
-
-master_session_maker = async_sessionmaker(master_engine, expire_on_commit=False)
-replica_session_maker = async_sessionmaker(replica_engine, expire_on_commit=False)
 
 async def get_async_master_session() -> AsyncGenerator[AsyncSession, None]:
-    async with master_session_maker() as session:
-        yield session
-
-async def get_async_replica_session() -> AsyncGenerator[AsyncSession, None]:
-    async with replica_session_maker() as session:
+    async with session_maker() as session:
         yield session
 
 
 async def get_user_db(session: AsyncSession = Depends(get_async_master_session)):
     yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
-
-async def get_user_read_only_db(session: AsyncSession = Depends(get_async_replica_session)):
-    yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
-
-# async def get_async_session(use_replica: bool = False) -> AsyncGenerator[AsyncSession, None]:
-#     """Get a session from the master (default) or replica (if use_replica=True)."""
-#     session_maker = replica_session_maker if use_replica else master_session_maker
-#     async with session_maker() as session:
-#         yield session
-
-
-# async def get_user_db(session: AsyncSession = Depends(lambda: get_async_session(use_replica=False))):
-#     yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
