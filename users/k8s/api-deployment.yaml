@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -o ./my-k8s-configs/
+    kompose.version: 1.35.0 (HEAD)
+  labels:
+    io.kompose.service: api
+  name: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: api
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert -o ./my-k8s-configs/
+        kompose.version: 1.35.0 (HEAD)
+      labels:
+        io.kompose.service: api
+    spec:
+      containers:
+        - env:
+            - name: GITHUB_OAUTH_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  key: GITHUB_OAUTH_CLIENT_ID
+                  name: docker-env
+            - name: GITHUB_OAUTH_CLIENT_SECRET
+              valueFrom:
+                configMapKeyRef:
+                  key: GITHUB_OAUTH_CLIENT_SECRET
+                  name: docker-env
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  key: POSTGRES_DB
+                  name: docker-env
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  key: POSTGRES_PASSWORD
+                  name: docker-env
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  key: POSTGRES_PORT
+                  name: docker-env
+            - name: POSTGRES_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  key: POSTGRES_SERVER
+                  name: docker-env
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  key: POSTGRES_USER
+                  name: docker-env
+            - name: SECRET
+              valueFrom:
+                configMapKeyRef:
+                  key: SECRET
+                  name: docker-env
+          image: users-microservice-api:latest
+          name: api
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+      restartPolicy: Always

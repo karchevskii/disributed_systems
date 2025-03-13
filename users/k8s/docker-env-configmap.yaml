@@ -1,0 +1,15 @@
+apiVersion: v1
+data:
+  GITHUB_OAUTH_CLIENT_ID: Ov23liO4S18a0kT21OVD
+  GITHUB_OAUTH_CLIENT_SECRET: 7238cd19d1852f81079508d6f37fedd92db7793a
+  POSTGRES_DB: postgres
+  POSTGRES_PASSWORD: password
+  POSTGRES_PORT: "5432"
+  POSTGRES_SERVER: haproxy
+  POSTGRES_USER: user
+  SECRET: m6hhof1cvm5xVllP+IFsSzHMw+zrT1PmIl1sRjUXaOV1XCaMFaEVLd5Ll659iVD9I6e3f/mY0qq7GiHgA1pk6aBTCSm7AZXliGD+
+kind: ConfigMap
+metadata:
+  labels:
+    io.kompose.service: api-docker-env
+  name: docker-env
