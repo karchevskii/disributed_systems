@@ -1,16 +1,52 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException, Body
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 import random
 import uuid
 import time
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Literal
 
-app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*", "allow_headers": ["Content-Type"], "methods": ["GET", "POST", "OPTIONS"]}})  # Enable CORS for all routes
+app = FastAPI(title="Tic-Tac-Toe API")
+
+# Set up CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
 
 # In-memory storage for active games
 # In production, you would use a database
 games = {}
+
+# Pydantic models for request/response validation
+class CreateGameRequest(BaseModel):
+    userId: str
+    difficulty: Literal["easy", "medium", "hard", "impossible"] = "hard"
+    humanSymbol: Literal["X", "O"] = "X"
+
+class MoveRequest(BaseModel):
+    row: int = Field(..., ge=0, lt=3)
+    col: int = Field(..., ge=0, lt=3)
+    player: Literal["X", "O"]
+
+class GameState(BaseModel):
+    id: str
+    board: List[List[str]]
+    currentPlayer: str
+    winner: Optional[str]
+    gameOver: bool
+    humanSymbol: str
+    botSymbol: str
+
+class GameResponse(BaseModel):
+    game: GameState
+    message: str
+
+class MessageResponse(BaseModel):
+    message: str
 
 class TicTacToeGame:
     def __init__(self, game_id: str, user_id: str, difficulty: str = "hard"):
@@ -202,7 +238,7 @@ class TicTacToeGame:
             return best_score
 
     def to_dict(self) -> Dict:
-        """Convert game state to dictionary for JSON response"""
+        """Convert game state to dictionary for response"""
         return {
             "id": self.id,
             "board": self.board,
@@ -214,19 +250,11 @@ class TicTacToeGame:
         }
 
 
-@app.route('/api/bot/create', methods=['POST'])
-def create_game():
+@app.post("/api/bot/create", response_model=GameResponse)
+async def create_game(request: CreateGameRequest):
     """Create a new game against the bot"""
-    data = request.get_json()
-    
-    user_id = data.get('userId')
-    if not user_id:
-        return jsonify({"error": "Missing userId"}), 400
-    
-    difficulty = data.get('difficulty', 'hard')
-    # Validate difficulty
-    if difficulty not in ["easy", "medium", "hard", "impossible"]:
-        difficulty = "hard"  # Default to hard if invalid
+    user_id = request.userId
+    difficulty = request.difficulty
     
     # Generate a game ID
     game_id = f"BOT{uuid.uuid4().hex[:6].upper()}"
@@ -238,10 +266,7 @@ def create_game():
     games[game_id] = game
     
     # Set player symbols based on preference
-    human_symbol = data.get('humanSymbol', 'X')
-    if human_symbol not in ['X', 'O']:
-        human_symbol = 'X'  # Default to X
-    
+    human_symbol = request.humanSymbol
     game.human_symbol = human_symbol
     game.bot_symbol = 'O' if human_symbol == 'X' else 'X'
     
@@ -251,78 +276,68 @@ def create_game():
         if bot_move:
             game.make_move(bot_move[0], bot_move[1], 'X')
     
-    return jsonify({
+    return {
         "game": game.to_dict(),
         "message": "Game created successfully"
-    })
+    }
 
 
-@app.route('/api/bot/move/<game_id>', methods=['POST'])
-def make_move(game_id):
+@app.post("/api/bot/move/{game_id}", response_model=GameResponse)
+async def make_move(game_id: str, request: MoveRequest):
     """Handle human move and respond with bot move"""
     if game_id not in games:
-        return jsonify({"error": "Game not found"}), 404
+        raise HTTPException(status_code=404, detail="Game not found")
     
     game = games[game_id]
-    data = request.get_json()
-    
-    # Get move from request
-    row = data.get('row')
-    col = data.get('col')
-    player = data.get('player')
-    
-    # Validate move
-    if row is None or col is None or player is None:
-        return jsonify({"error": "Invalid move parameters"}), 400
     
     # Make human move
-    move_success = game.make_move(row, col, player)
+    move_success = game.make_move(request.row, request.col, request.player)
     if not move_success:
-        return jsonify({"error": "Invalid move"}), 400
+        raise HTTPException(status_code=400, detail="Invalid move")
     
     # Check if game is over after human move
     if game.game_over:
-        return jsonify({
+        return {
             "game": game.to_dict(),
             "message": "Game over"
-        })
+        }
     
     # Make bot move
     bot_move = game.get_bot_move()
     if bot_move:
         game.make_move(bot_move[0], bot_move[1], game.current_player)
     
-    return jsonify({
+    return {
         "game": game.to_dict(),
         "message": "Move processed successfully"
-    })
+    }
 
 
-@app.route('/api/bot/game/<game_id>', methods=['GET'])
-def get_game(game_id):
+@app.get("/api/bot/game/{game_id}", response_model=GameResponse)
+async def get_game(game_id: str):
     """Get current game state"""
     if game_id not in games:
-        return jsonify({"error": "Game not found"}), 404
+        raise HTTPException(status_code=404, detail="Game not found")
     
-    return jsonify({
-        "game": games[game_id].to_dict()
-    })
+    return {
+        "game": games[game_id].to_dict(),
+        "message": "Game retrieved successfully"
+    }
 
 
-@app.route('/api/bot/leave/<game_id>', methods=['POST'])
-def leave_game(game_id):
+@app.post("/api/bot/leave/{game_id}", response_model=MessageResponse)
+async def leave_game(game_id: str):
     """End game and clean up resources"""
     if game_id in games:
         del games[game_id]
     
-    return jsonify({
+    return {
         "message": "Game ended successfully"
-    })
+    }
 
 
-# Maintenance endpoint to clean up stale games
-@app.route('/api/bot/maintenance/cleanup', methods=['POST'])
-def cleanup_games():
+@app.post("/api/bot/maintenance/cleanup", response_model=MessageResponse)
+async def cleanup_games():
     """Remove stale games (older than 1 hour with no activity)"""
     current_time = time.time()
     stale_threshold = 60 * 60  # 1 hour
@@ -335,10 +350,11 @@ def cleanup_games():
     for game_id in stale_games:
         del games[game_id]
     
-    return jsonify({
+    return {
         "message": f"Removed {len(stale_games)} stale games"
-    })
+    }
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
