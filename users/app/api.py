@@ -7,8 +7,8 @@ from app.schemas import UserCreate
 from app.db import get_async_session, get_user_db
 
 router = APIRouter(
-    prefix="/api",
-    tags=["api"],
+    prefix="/auth",
+    tags=["auth"],
 )
 
 get_async_session_context = contextlib.asynccontextmanager(get_async_session)

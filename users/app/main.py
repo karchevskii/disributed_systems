@@ -43,7 +43,7 @@ async def check_auth(user: User = Depends(current_active_user)):
 async def authenticated_route(user: User = Depends(current_active_user)):
     return {"message": f"Hello {user.email}!"}
 
-@app.get("/auth/logout")
+@app.get("/auth/logout", tags=["auth"])
 async def logout():
     response = {"message": "Logged out"}
     # Create a response object with message
