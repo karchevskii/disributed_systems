@@ -1,4 +1,4 @@
-name: 'users-microservice'
+# name: 'users-microservice'
 version: '3.9'
 
 services:
