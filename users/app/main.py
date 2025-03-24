@@ -43,6 +43,15 @@ async def check_auth(user: User = Depends(current_active_user)):
 async def authenticated_route(user: User = Depends(current_active_user)):
     return {"message": f"Hello {user.email}!"}
 
+@app.get("/auth/logout")
+async def logout():
+    response = {"message": "Logged out"}
+    # Create a response object with message
+    from fastapi.responses import JSONResponse
+    response_obj = JSONResponse(content=response)
+    # Delete the tictactoe cookie
+    response_obj.delete_cookie(key="tictactoe", path="/")
+    return response_obj
 
 allowed_origins = [
     "http://localhost:3000",
