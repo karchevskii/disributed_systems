@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI
+from fastapi.responses import RedirectResponse
 
 from app.oauth_route import get_oauth_router
 from app.db import User
@@ -41,7 +42,8 @@ async def check_auth(user: User = Depends(current_active_user)):
 
 @app.get("/authenticated-route")
 async def authenticated_route(user: User = Depends(current_active_user)):
-    return {"message": f"Hello {user.email}!"}
+    # return {"message": f"Hello {user.email}!"}
+    return RedirectResponse(url="http://localhost:3000")
 
 @app.get("/auth/logout", tags=["auth"])
 async def logout():
