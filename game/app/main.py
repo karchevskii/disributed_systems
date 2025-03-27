@@ -592,6 +592,7 @@ async def create_game(data: CreateGameScheme, user=Depends(get_current_user)):
         current_player = user["id"]
         if type == "bot":
             players["o"] = "bot"
+            status = "active"
     else:
         players = {"x": None, "o": user["id"]}
         if type == "bot":
@@ -650,7 +651,7 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     elif game_data["players"]["o"] is None:
         game_data["players"]["o"] = user["id"]
         
-    
+    game_data["status"] = "active"
     # Update game in Redis
     redis.set(f"game:{game_id}", json.dumps(game_data))
     redis.srem("open_games", game_id)  # Remove from open games
