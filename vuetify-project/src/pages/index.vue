@@ -1,5 +1,5 @@
 <template>
-  <HelloWorld />
+  <TicTacToe />
 </template>
 
 <script setup>
