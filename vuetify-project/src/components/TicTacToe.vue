@@ -350,25 +350,25 @@ export default {
         if (response.ok) {
           const userData = await response.json();
           
-          // Determine if GitHub user based on OAuth accounts
-          const isGithubUser = userData.oauth_accounts && 
-                               userData.oauth_accounts.length > 0 && 
-                               userData.oauth_accounts.some(account => account.oauth_name === 'github');
+          // Determine if GitHub user or guest based on email format
+          const isGuestUser = userData.email && userData.email.includes('@guest.');
           
           this.isLoggedIn = true;
-          this.userType = isGithubUser ? 'github' : 'guest';
+          this.userType = isGuestUser ? 'guest' : 'github';
           this.userEmail = userData.email;
           this.userId = userData.id;
           
-          // Extract username from email or use email as username
-          if (isGithubUser && userData.oauth_accounts[0].account_id) {
-            // Use GitHub username if available
-            this.username = userData.oauth_accounts[0].account_id;
+          if (isGuestUser) {
+            // For guest users, generate a friendly guest name
+            const randomId = Math.floor(Math.random() * 1000);
+            this.username = `Guest_${randomId}`;
           } else {
-            // For guest users, use part of the email before @ or generate a guest name
-            this.username = userData.email.split('@')[0].replace(/[0-9a-f-]+/g, '');
-            if (!this.username) {
-              this.username = 'Guest_' + Math.floor(Math.random() * 1000);
+            // For GitHub users, use GitHub account_id from oauth_accounts if available
+            if (userData.oauth_accounts && userData.oauth_accounts.length > 0) {
+              this.username = userData.oauth_accounts[0].account_id || 'GitHub User';
+            } else {
+              // Fallback to email username part
+              this.username = userData.email.split('@')[0] || 'User';
             }
           }
         } else {
