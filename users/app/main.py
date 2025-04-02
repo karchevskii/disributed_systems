@@ -16,7 +16,9 @@ from app.exceptions.handlers import all_exception_handlers
 
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+)
 
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
