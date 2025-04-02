@@ -1,0 +1,13 @@
+name: dev-game_history-microservice
+
+services:
+  db1:
+    image: postgres
+    restart: always
+    env_file:
+      - ./devdb.env
+    ports:
+      - 5433:5432
+
+volumes:
+  postgresql_master_data:
