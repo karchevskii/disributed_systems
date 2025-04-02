@@ -4,38 +4,23 @@ from typing import Dict, Optional
 import uuid
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-import os
 import redis
 
 from app.schemes import CreateGameDTO, CreateGameScheme
+from app.core.config import settings
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 app = FastAPI()
 
-# Redis configuration
-REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
-REDIS_DB = int(os.environ.get("REDIS_DB", 0))
-REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "password")
 
 redis = redis.Redis(
-    host=REDIS_HOST,
-    port=REDIS_PORT,
-    db=REDIS_DB,
-    password=REDIS_PASSWORD,
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    db=settings.REDIS_DB,
+    password=settings.REDIS_PASSWORD,
     decode_responses=True
-)
-
-allowed_origins = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
 )
 
 class AuthenticationMiddleware:
@@ -170,11 +155,10 @@ def best_move(board):
 async def websocket_endpoint(websocket: WebSocket, game_id: str):
     # Authenticate user with token from query parameter
     import httpx
-    import logging
 
-    logging.info(f"WebSocket connection request for game {game_id}")
-    logging.debug(f"Headers: {websocket.cookies}")
-    logging.debug(f"Query params: {websocket.query_params}")
+    logger.info(f"WebSocket connection request for game {game_id}")
+    logger.debug(f"Headers: {websocket.cookies}")
+    logger.debug(f"Query params: {websocket.query_params}")
 
     async with httpx.AsyncClient() as client:
         try:
@@ -186,12 +170,15 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
             
             if users_response.status_code != 200:
                 await websocket.close(code=1008, reason="Invalid authentication")
+                logger.error("Invalid authentication")
                 return
             
+            logger.debug("User authenticated successfully")
             user = users_response.json()
             
         except httpx.RequestError:
             await websocket.close(code=1013, reason="Authentication service unavailable")
+            logger.error("Authentication service unavailable")
             return
     
     # Get game from Redis
@@ -205,6 +192,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     # Check if user is a player in this game
     if user["id"] not in [game_data["players"]["x"], game_data["players"]["o"]]:
         await websocket.close(code=1008, reason="You are not a player in this game")
+        logger.debug("User is not a player in this game")
         return
     
     # Determine player's symbol (X or O)
@@ -212,6 +200,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     
     # Connect to WebSocket
     await manager.connect(websocket, game_id, user["id"])
+    logger.debug(f"User {user['id']} connected to game {game_id} as {player_symbol}")
     
     try:
         # Notify all connected players that a new player has connected
@@ -225,9 +214,11 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
             "type": "game_state",
             "game": game_data
         })
+        logger.debug(f"Sent initial game state to {user['id']}")
         
         # Multiplayer game loop
         if game_data["type"] == "multiplayer":
+            logger.debug("Starting multiplayer game loop")
             while True:
                 data = await websocket.receive_json()
                 
@@ -315,6 +306,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
         
         # Bot game loop
         if game_data["type"] == "bot":
+            logger.debug("Starting bot game loop")
             # If bot starts (bot is X), make first move immediately
             if game_data["current_player"] == "bot" and game_data["players"]["x"] == "bot":
                 # Bot plays as X and makes the first move
@@ -339,6 +331,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 
                 # Save updated game state to Redis
                 redis.set(f"game:{game_id}", json.dumps(game_data))
+                logger.debug(f"Saved initial game state to Redis for game {game_id}")
                 
                 # Send updated game state to player
                 await websocket.send_json({
@@ -658,3 +651,19 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     # redis.sadd(f"user:{user['id']}:games", game_id)  # Add to user's games
     
     return game_data
+
+
+
+
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
