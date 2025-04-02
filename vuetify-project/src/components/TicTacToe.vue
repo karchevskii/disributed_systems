@@ -76,7 +76,7 @@
                     Create New Game
                   </v-btn>
                   
-                  <!-- Create New Game -->
+                  <!-- Join Game -->
                   <v-btn 
                     color="secondary" 
                     class="mb-3" 
@@ -128,7 +128,7 @@
                           :key="'cell-' + rowIndex + '-' + colIndex"
                           class="game-cell"
                           @click="makeMove(rowIndex, colIndex)"
-                          :class="{ 'disabled': cell !== '' || gameOver || (gameCode && currentPlayer !== playerSymbol) }"
+                          :class="{ 'disabled': cell !== '' || gameOver || currentPlayer !== playerSymbol }"
                         >
                           <span v-if="cell === 'X'" class="x-mark">X</span>
                           <span v-else-if="cell === 'O'" class="o-mark">O</span>
@@ -140,7 +140,7 @@
                 
                 <!-- Game Control Buttons -->
                 <div class="text-center">
-                  <!-- MODIFIED: Only show "Back to Menu" button when game is over -->
+                  <!-- Only show "Back to Menu" button when game is over -->
                   <v-btn v-if="gameOver" color="success" @click="leaveGame">
                     <v-icon left>mdi-exit-to-app</v-icon>
                     Back to Menu
@@ -203,6 +203,51 @@
         </v-card>
       </v-dialog>
       
+      <!-- Symbol Selection Dialog (X or O) -->
+      <v-dialog v-model="showSymbolDialog" max-width="400">
+        <v-card>
+          <v-card-title class="text-h5">Choose Your Symbol</v-card-title>
+
+          <v-card-text>
+            <p class="mb-4">Which symbol would you like to play with?</p>
+            
+            <v-list>
+              <!-- Choose X -->
+              <v-list-item @click="confirmCreateGame('X')" link>
+                <v-list-item-icon>
+                  <v-icon color="red">mdi-alpha-x</v-icon>
+                </v-list-item-icon>
+
+                <v-list-item-content>
+                  <v-list-item-title>Play as X</v-list-item-title>
+
+                  <v-list-item-subtitle>X always goes first</v-list-item-subtitle>
+                </v-list-item-content>
+              </v-list-item>
+              
+              <!-- Choose O -->
+              <v-list-item @click="confirmCreateGame('O')" link>
+                <v-list-item-icon>
+                  <v-icon color="blue">mdi-alpha-o</v-icon>
+                </v-list-item-icon>
+
+                <v-list-item-content>
+                  <v-list-item-title>Play as O</v-list-item-title>
+
+                  <v-list-item-subtitle>O goes second</v-list-item-subtitle>
+                </v-list-item-content>
+              </v-list-item>
+            </v-list>
+          </v-card-text>
+          
+          <!-- Cancel Button -->
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn color="grey" text @click="showSymbolDialog = false">Cancel</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+      
       <!-- Join Game Dialog -->
       <v-dialog v-model="showJoinDialog" max-width="400">
         <v-card>
@@ -212,10 +257,10 @@
           <v-card-text>
             <v-form @submit.prevent="joinGame">
               <v-text-field
-                label="Game Code"
+                label="Game ID"
                 v-model="joinGameCode"
                 prepend-icon="mdi-pound"
-                placeholder="Enter game code or paste invite link"
+                placeholder="Enter game ID or paste invite link"
                 required
               ></v-text-field>
             </v-form>
@@ -249,6 +294,15 @@
 <script>
 export default {
   name: 'TicTacToe',
+  
+  mounted() {
+    // Check if user is already logged in (via API)
+    this.checkLoginStatus();
+    
+    // Check if the URL contains a game code (for direct joining)
+    this.checkUrlForGameCode();
+  },
+  
   data() {
     return {
       // Auth related
@@ -277,6 +331,8 @@ export default {
       showGameModeDialog: false,
       showJoinDialog: false,
       joinGameCode: '',
+      showSymbolDialog: false, // New dialog for selecting X or O
+      selectedSymbol: null, // For storing selected symbol
       
       // Notifications
       snackbar: {
@@ -286,35 +342,14 @@ export default {
       },
       
       // API endpoints
-      apiBaseUrl: 'http://localhost:8000'
+      apiBaseUrl: 'http://localhost:8000',
+      gameApiUrl: 'http://localhost:8001',
+      
+      // WebSocket connection
+      socket: null,
     };
   },
-  computed: {
-    gameStatus() {
-      if (this.winner) {
-        return `Player ${this.winner} wins!`;
-      } else if (this.gameOver) {
-        return "It's a draw!";
-      } else if (this.gameCode && this.currentPlayer !== this.playerSymbol) {
-        return `Waiting for opponent...`;
-      } else {
-        return `Your turn (${this.currentPlayer})`;
-      }
-    },
-    
-    // Generate the full invite link for the current game
-    inviteLink() {
-      if (!this.gameCode) return null;
-      return `${window.location.origin}${window.location.pathname}?game=${this.gameCode}`;
-    }
-  },
-  mounted() {
-    // Check if user is already logged in (via API)
-    this.checkLoginStatus();
-    
-    // Check if the URL contains a game code (for direct joining)
-    this.checkUrlForGameCode();
-  },
+  
   methods: {
     // Authentication methods
     async checkLoginStatus() {
@@ -350,24 +385,24 @@ export default {
         if (response.ok) {
           const userData = await response.json();
           
-          // Determine if GitHub user or guest based on email format
-          const isGuestUser = userData.email && userData.email.includes('@guest.');
+          // Determine if GitHub user based on OAuth accounts
+          const isGithubUser = userData.email && userData.email.includes('@guest.');
           
           this.isLoggedIn = true;
-          this.userType = isGuestUser ? 'guest' : 'github';
+          this.userType = isGithubUser ? 'guest' : 'github';
           this.userEmail = userData.email;
           this.userId = userData.id;
           
-          if (isGuestUser) {
-            // For guest users, generate a friendly guest name
-            const randomId = Math.floor(Math.random() * 1000);
-            this.username = `Guest_${randomId}`;
+          // Extract username from email or use email as username
+          if (isGithubUser && userData.oauth_accounts[0].account_id) {
+            // Use GitHub username if available
+            this.username = userData.oauth_accounts[0].account_id;
           } else {
-            // For GitHub users, use GitHub account_id from oauth_accounts if available
+            // For guest users, use part of the email before @ or generate a guest name
             if (userData.oauth_accounts && userData.oauth_accounts.length > 0) {
               this.username = userData.oauth_accounts[0].account_id || 'GitHub User';
             } else {
-              // Fallback to email username part
+              // Fallback to emailusername part
               this.username = userData.email.split('@')[0] || 'User';
             }
           }
@@ -384,13 +419,13 @@ export default {
       try {
         // This is the correct endpoint for GitHub login based on the backend code
         const response = await fetch(`${this.apiBaseUrl}/auth/github/authorize`, {
-        method: 'GET',
-        credentials: 'include',
+          method: 'GET',
+          credentials: 'include',
         });
     
         if (response.ok) {
           const data = await response.json();
-          // Hier leiten wir zur GitHub-Autorisierungs-URL weiter
+          // Redirect to GitHub authorization URL
           window.location.href = data.authorization_url;
         } else {
           this.showNotification('Failed to get GitHub authorization URL', 'error');
@@ -460,143 +495,263 @@ export default {
       }
     },
     
-    // Game management methods
-    createNewGame(mode) {
-      this.gameMode = mode;
-      this.showGameModeDialog = false;
+    // Check for game code in URL
+    checkUrlForGameCode() {
+      // Check if the URL has a game code parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      const gameCode = urlParams.get('game');
       
-      // First, ensure we've properly ended any previous game
-      if (this.inGame && this.gameCode) {
-        this.leaveGame();
-      }
-      
-      if (mode === 'human') {
-        // Call matchmaking service to create a new human vs human game
-        // This would be an API call to your matchmaking microservice
-        
-        // Simulate response from matchmaking service
-        setTimeout(() => {
-          const gameCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-          
-          // Initialize game
-          this.startGame(gameCode, 'X', 'human'); // Creator plays as X
-          this.showNotification(`Game created! Share the invite link with a friend.`, 'success');
-        }, 300);
-      } else if (mode === 'bot') {
-        // Reset game state before creating a new one
-        this.resetGame();
-        
-        // Call bot microservice API to create a new game against the bot
-        fetch('http://localhost:5000/game/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: "bot",
-            symbol: chosenSymbol,
-            userId: this.userId || 'guest_' + Math.random().toString(36).substring(2, 10),
-            difficulty: 'hard'
-          }),
-          credentials: 'include'
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Network response was not ok: ' + response.statusText);
-          }
-          return response.json();
-        })
-        .then(data => {
-          if (data.game) {
-            // Initialize game with data from the server
-            this.startGame(data.game.id, data.game.humanSymbol, 'bot');
-            // Update the board state in case the bot went first
-            this.board = data.game.board;
-            this.currentPlayer = data.game.currentPlayer;
-            this.showNotification('Starting game against bot', 'success');
-          } else {
-            this.showNotification('Failed to start game', 'error');
-          }
-        })
-        .catch(error => {
-          console.error('Error starting bot game:', error);
-          this.showNotification('Error connecting to game server: ' + error.message, 'error');
-        });
+      if (gameCode && this.isLoggedIn) {
+        // Auto-join the game
+        this.joinGameCode = gameCode;
+        this.joinGame();
+      } else if (gameCode && !this.isLoggedIn) {
+        // Store game code for after login
+        this.joinGameCode = gameCode;
+        // Show a notification to log in first
+        this.showNotification('Please log in to join the game', 'info');
       }
     },
     
-    joinGame() {
+    // UPDATED: Create New Game method
+    async createNewGame(mode) {
+      this.gameMode = mode;
+      this.showGameModeDialog = false;
+      
+      // Show symbol selection dialog
+      this.showSymbolDialog = true;
+    },
+    
+    // NEW: Method to select symbol and create game
+    async confirmCreateGame(symbol) {
+      this.showSymbolDialog = false;
+      
+      try {
+        // First, ensure we've properly ended any previous game
+        if (this.inGame && this.gameCode) {
+          this.leaveGame();
+        }
+        
+        // Call the game API to create a new game
+        const response = await fetch(`${this.gameApiUrl}/game/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: this.gameMode === 'human' ? 'multiplayer' : 'bot',
+            symbol: symbol.toLowerCase() // Backend expects lowercase 'x' or 'o'
+          }),
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to create game: ' + response.statusText);
+        }
+        
+        const gameData = await response.json();
+        
+        // Determine player symbol
+        const playerSymbol = symbol;
+        
+        // Initialize the game
+        this.startGame(gameData.id, playerSymbol, this.gameMode);
+        
+        // If multiplayer game, show the invite message
+        if (this.gameMode === 'human') {
+          this.showNotification(`Game created! Share the Game ID: ${gameData.id} with a friend.`, 'success');
+        } else {
+          this.showNotification('Game against bot started!', 'success');
+          
+          // Connect to WebSocket for game updates
+          this.connectToGameSocket(gameData.id);
+        }
+      } catch (error) {
+        console.error('Error creating game:', error);
+        this.showNotification('Error creating game: ' + error.message, 'error');
+      }
+    },
+    
+    // UPDATED: Join Game method
+    async joinGame() {
       if (!this.joinGameCode) return;
       
-      // Clean up input (may be full URL or just code)
-      let code = this.joinGameCode.trim();
-      
-      // Check if it's a URL and extract the code
-      if (code.includes('?game=')) {
-        code = code.split('?game=')[1].split('&')[0];
-      }
-      
-      // Call matchmaking service to join the game
-      // Example API call:
-      // fetch(`/api/matchmaking/join/${code}`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ userId: this.userId }),
-      //   credentials: 'include'
-      // })
-      
-      // Determine if joining a bot game or human game based on code prefix
-      const isJoiningBotGame = code.startsWith('BOT');
-      const gameMode = isJoiningBotGame ? 'bot' : 'human';
-      
-      // Simulate joining
-      setTimeout(() => {
-        // In a real implementation, verify the game exists
-        this.startGame(code, 'O', gameMode); // Joiner plays as O
+      try {
+        // Clean up input (may be full URL or just code)
+        let gameId = this.joinGameCode.trim();
+        
+        // Check if it's a URL and extract the code
+        if (gameId.includes('?game=')) {
+          gameId = gameId.split('?game=')[1].split('&')[0];
+        }
+        
+        // Call the game API to join the game
+        const response = await fetch(`${this.gameApiUrl}/game/join/${gameId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to join game: ' + response.statusText);
+        }
+        
+        const gameData = await response.json();
+        
+        // Determine player symbol based on the game data
+        // The player who joins gets the symbol that's not taken yet
+        const currentUserId = this.userId;
+        let playerSymbol;
+        
+        if (gameData.players.x === currentUserId) {
+          playerSymbol = 'X';
+        } else if (gameData.players.o === currentUserId) {
+          playerSymbol = 'O';
+        } else {
+          throw new Error('Player not found in game data');
+        }
+        
+        // Initialize the game
+        this.startGame(gameId, playerSymbol, gameData.type === 'bot' ? 'bot' : 'human');
+        
+        // Connect to WebSocket for game updates
+        this.connectToGameSocket(gameId);
+        
         this.showNotification(`Joined game successfully`, 'success');
-      }, 300);
+      } catch (error) {
+        console.error('Error joining game:', error);
+        this.showNotification('Error joining game: ' + error.message, 'error');
+      }
       
       this.showJoinDialog = false;
       this.joinGameCode = '';
     },
     
-    startGame(gameCode, playerSymbol, gameMode) {
-      // Reset the game state
-      this.resetGame();
+    // NEW: Connect to WebSocket for game updates
+    connectToGameSocket(gameId) {
+      // Close any existing socket connection
+      if (this.socket) {
+        this.socket.close();
+      }
       
-      // Set up the multiplayer game
-      this.inGame = true;
-      this.gameCode = gameCode;
-      this.playerSymbol = playerSymbol;
-      this.gameMode = gameMode;
+      // Create WebSocket connection
+      this.socket = new WebSocket(`ws://localhost:8001/ws/game/${gameId}`);
       
-      // In a real implementation, you would set up WebSocket connection here
-      // to receive moves from the opponent or bot
+      // Set up event handlers
+      this.socket.onopen = () => {
+        console.log('WebSocket connection established');
+      };
       
-      // If playing against a bot and bot goes first (player is O), simulate bot move
-      if (gameMode === 'bot' && playerSymbol === 'O') {
-        this.simulateBotMove();
+      this.socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        this.handleSocketMessage(data);
+      };
+      
+      this.socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        this.showNotification('Error connecting to game server', 'error');
+      };
+      
+      this.socket.onclose = () => {
+        console.log('WebSocket connection closed');
+      };
+    },
+    
+    // NEW: Handle WebSocket messages
+    handleSocketMessage(data) {
+      if (data.type === 'game_state') {
+        // Update the game state
+        const gameData = data.game;
+        
+        // Update the board
+        // Convert backend's flat array to frontend's 2D array
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 3; j++) {
+            const index = i * 3 + j;
+            this.board[i][j] = gameData.board[index] ? gameData.board[index].toUpperCase() : '';
+          }
+        }
+        
+        // Update game status
+        if (gameData.status === 'completed') {
+          this.gameOver = true;
+          if (gameData.winner === 'draw') {
+            this.winner = null; // Draw
+          } else if (gameData.winner) {
+            this.winner = gameData.winner.toUpperCase();
+          }
+        }
+        
+        // Update current player
+        if (gameData.current_player === this.userId) {
+          this.currentPlayer = this.playerSymbol;
+        } else {
+          this.currentPlayer = this.playerSymbol === 'X' ? 'O' : 'X';
+        }
+        
+        // Update move count
+        this.movesCount = gameData.board.filter(cell => cell !== '').length;
+      } else if (data.type === 'error') {
+        this.showNotification(data.message, 'error');
+      } else if (data.type === 'chat') {
+        // Handle chat messages if needed
+        console.log('Chat message:', data);
+      } else if (data.type === 'player_connected' || data.type === 'player_disconnected') {
+        // Handle player connection status
+        console.log('Player status changed:', data);
       }
     },
     
+    // UPDATED: Make Move method to work with the WebSocket connection
+    makeMove(row, col) {
+      // Check if the move is valid
+      if (this.board[row][col] !== '' || this.gameOver) {
+        return;
+      }
+      
+      // If in a game, check if it's the player's turn
+      if (this.currentPlayer !== this.playerSymbol) {
+        return;
+      }
+      
+      // Calculate position index (convert 2D index to flat index)
+      const position = row * 3 + col;
+      
+      // Send move to server via WebSocket
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({
+          type: 'move',
+          position: position
+        }));
+      } else {
+        this.showNotification('Connection to game server lost', 'error');
+      }
+    },
+    
+    // UPDATED: Start Game method
+    startGame(gameId, playerSymbol, gameMode) {
+      // Reset the game state
+      this.resetGame();
+      
+      // Set up the game
+      this.inGame = true;
+      this.gameCode = gameId;
+      this.playerSymbol = playerSymbol;
+      this.gameMode = gameMode;
+      
+      // Connect to WebSocket
+      this.connectToGameSocket(gameId);
+    },
+    
+    // UPDATED: Leave Game method
     leaveGame() {
       // Don't do anything if not in a game
       if (!this.inGame || !this.gameCode) {
         return;
       }
       
-      // In a real implementation, notify the appropriate service
-      if (this.gameMode === 'human') {
-        // Notify matchmaking service
-        // fetch(`/api/matchmaking/leave/${this.gameCode}`, { 
-        //   method: 'POST'
-        // })
-      } else if (this.gameMode === 'bot') {
-        // Notify bot service
-        fetch(`http://localhost:5000/api/bot/leave/${this.gameCode}`, { 
-          method: 'POST'
-        })
-        .catch(error => {
-          console.error('Error leaving game:', error);
-        });
+      // Close WebSocket connection
+      if (this.socket) {
+        this.socket.close();
+        this.socket = null;
       }
       
       // Clear game state before starting a new one
@@ -607,126 +762,35 @@ export default {
       this.resetGame();
     },
     
-    makeMove(row, col) {
-      // Check if the move is valid
-      if (this.board[row][col] !== '' || this.gameOver) {
-        return;
-      }
-      
-      // If in a multiplayer game, check if it's the player's turn
-      if (this.gameCode && this.currentPlayer !== this.playerSymbol) {
-        return;
-      }
-      
-      // Make the move
-      this.board[row][col] = this.currentPlayer;
-      this.movesCount++;
-      
-      // Send move to appropriate service
-      if (this.gameMode === 'human') {
-        // Send move to human opponent via matchmaking service
-        // fetch(`/api/matchmaking/move/${this.gameCode}`, {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ row, col, player: this.currentPlayer })
-        // })
-      } else if (this.gameMode === 'bot') {
-        // Send move to bot service
-        fetch(`http://localhost:5000/api/bot/move/${this.gameCode}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ row, col, player: this.currentPlayer })
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Network response was not ok: ' + response.statusText);
-          }
-          return response.json();
-        })
-        .then(data => {
-          if (data.game) {
-            // Update the game state with the server's response
-            this.board = data.game.board;
-            this.currentPlayer = data.game.currentPlayer;
-            
-            if (data.game.gameOver) {
-              this.gameOver = true;
-              this.winner = data.game.winner;
-            }
-          } else {
-            this.showNotification('Error processing move: ' + (data.error || 'Unknown error'), 'error');
-          }
-        })
-        .catch(error => {
-          console.error('Error making move:', error);
-          this.showNotification('Error connecting to game server: ' + error.message, 'error');
-        });
-      }
-      
-      // Check for win
-      if (this.checkWin()) {
-        this.winner = this.currentPlayer;
-        this.gameOver = true;
-        return;
-      }
-      
-      // Check for draw
-      if (this.movesCount === 9) {
-        this.gameOver = true;
-        return;
-      }
-      
-      // Switch player
-      this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
-      
-      // If playing against bot and it's the bot's turn, simulate bot move
-      if (this.gameMode === 'bot' && this.currentPlayer !== this.playerSymbol && !this.gameOver) {
-        this.simulateBotMove();
-      }
+    // Utility methods
+    showNotification(text, color = 'info') {
+      this.snackbar.text = text;
+      this.snackbar.color = color;
+      this.snackbar.show = true;
     },
     
-    simulateBotMove() {
-      // This is a placeholder function for demonstrating the frontend
-      // In a real implementation, the bot's move would come from the backend
+    copyGameLink() {
+      if (!this.inviteLink) return;
       
-      // Simulate thinking time
-      setTimeout(() => {
-        // Find an empty cell randomly
-        let emptyCells = [];
-        for (let i = 0; i < 3; i++) {
-          for (let j = 0; j < 3; j++) {
-            if (this.board[i][j] === '') {
-              emptyCells.push({row: i, col: j});
-            }
-          }
-        }
-        
-        if (emptyCells.length > 0) {
-          // Choose a random empty cell
-          const randomIndex = Math.floor(Math.random() * emptyCells.length);
-          const { row, col } = emptyCells[randomIndex];
-          
-          // Make the bot's move
-          this.board[row][col] = this.currentPlayer;
-          this.movesCount++;
-          
-          // Check for win
-          if (this.checkWin()) {
-            this.winner = this.currentPlayer;
-            this.gameOver = true;
-            return;
-          }
-          
-          // Check for draw
-          if (this.movesCount === 9) {
-            this.gameOver = true;
-            return;
-          }
-          
-          // Switch player back to human
-          this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
-        }
-      }, 1000);
+      navigator.clipboard.writeText(this.inviteLink)
+        .then(() => {
+          this.showNotification('Invite link copied to clipboard!', 'success');
+        })
+        .catch(err => {
+          console.error('Could not copy text: ', err);
+        });
+    },
+    
+    resetGame() {
+      this.board = [
+        ['', '', ''],
+        ['', '', ''],
+        ['', '', '']
+      ];
+      this.currentPlayer = 'X';
+      this.winner = null;
+      this.gameOver = false;
+      this.movesCount = 0;
     },
     
     checkWin() {
@@ -756,55 +820,6 @@ export default {
       }
       
       return false;
-    },
-    
-    resetGame() {
-      this.board = [
-        ['', '', ''],
-        ['', '', ''],
-        ['', '', '']
-      ];
-      this.currentPlayer = 'X';
-      this.winner = null;
-      this.gameOver = false;
-      this.movesCount = 0;
-    },
-    
-    // URL handling methods
-    checkUrlForGameCode() {
-      // Check if the URL has a game code parameter
-      const urlParams = new URLSearchParams(window.location.search);
-      const gameCode = urlParams.get('game');
-      
-      if (gameCode && this.isLoggedIn) {
-        // Auto-join the game
-        this.joinGameCode = gameCode;
-        this.joinGame();
-      } else if (gameCode && !this.isLoggedIn) {
-        // Store game code for after login
-        this.joinGameCode = gameCode;
-        // Show a notification to log in first
-        this.showNotification('Please log in to join the game', 'info');
-      }
-    },
-    
-    // Utility methods
-    copyGameLink() {
-      if (!this.inviteLink) return;
-      
-      navigator.clipboard.writeText(this.inviteLink)
-        .then(() => {
-          this.showNotification('Invite link copied to clipboard!', 'success');
-        })
-        .catch(err => {
-          console.error('Could not copy text: ', err);
-        });
-    },
-    
-    showNotification(text, color = 'info') {
-      this.snackbar.text = text;
-      this.snackbar.color = color;
-      this.snackbar.show = true;
     }
   }
 };
