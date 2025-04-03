@@ -7,7 +7,6 @@ COPY ./requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ./alembic.ini /src/alembic.ini
-COPY ./prestart.sh /src/prestart.sh
 COPY ./app /src/app
 
 # CMD to run the application
