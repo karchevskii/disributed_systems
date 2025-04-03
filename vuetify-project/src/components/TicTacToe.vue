@@ -138,8 +138,17 @@
                   @make-move="makeMove"
                 />
                 
+                <!-- Chat Component -->
+                <game-chat
+                  ref="gameChat"
+                  :playerSymbol="playerSymbol"
+                  :gameMode="gameMode"
+                  class="mt-4"
+                  @send-message="sendChatMessage"
+                />
+                
                 <!-- Game Control Buttons -->
-                <div class="text-center">
+                <div class="text-center mt-4">
                   <!-- Only show "Back to Menu" button when game is over -->
                   <v-btn v-if="gameOver" color="success" @click="leaveGame">
                     <v-icon left>mdi-exit-to-app</v-icon>
@@ -202,6 +211,7 @@
 import GameBoard from './GameBoard.vue';
 import GameDialogs from './GameDialogs.vue';
 import OpenGamesDialog from './OpenGamesDialog.vue';
+import GameChat from './GameChat.vue';
 import GameService from './GameService.js';
 
 export default {
@@ -209,7 +219,8 @@ export default {
   components: {
     OpenGamesDialog,
     GameBoard,
-    GameDialogs
+    GameDialogs,
+    GameChat
   },
   
   mounted() {
@@ -561,6 +572,14 @@ export default {
       this.joinGameCode = '';
     },
     
+    // Chat methods
+    sendChatMessage(message) {
+      if (!this.inGame) return;
+      
+      // Send the chat message through WebSocket
+      this.gameService.sendChatMessage(message);
+    },
+    
     // Handle WebSocket messages
     handleSocketMessage(data) {
       if (data.type === 'game_state') {
@@ -595,6 +614,14 @@ export default {
         
         // Update move count
         this.movesCount = gameData.board.filter(cell => cell !== '').length;
+      } else if (data.type === 'chat') {
+        // Handle chat messages
+        if (this.$refs.gameChat) {
+          this.$refs.gameChat.addMessage({
+            sender: data.sender.toUpperCase(),
+            message: data.message
+          });
+        }
       } else if (data.type === 'error') {
         this.showNotification(data.message, 'error');
       }
@@ -681,6 +708,11 @@ export default {
       this.winner = null;
       this.gameOver = false;
       this.movesCount = 0;
+      
+      // Clear chat messages if chat component exists
+      if (this.$refs.gameChat) {
+        this.$refs.gameChat.messages = [];
+      }
     }
   }
 };
