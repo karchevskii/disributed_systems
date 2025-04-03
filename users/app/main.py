@@ -44,8 +44,7 @@ async def check_auth(user: User = Depends(current_active_user)):
 
 @app.get("/authenticated-route")
 async def authenticated_route(user: User = Depends(current_active_user)):
-    # return {"message": f"Hello {user.email}!"}
-    return RedirectResponse(url="http://localhost:3000")
+    return RedirectResponse(url=settings.FRONTEND_URL)
 
 @app.get("/auth/logout", tags=["auth"])
 async def logout():
@@ -57,14 +56,13 @@ async def logout():
     response_obj.delete_cookie(key="tictactoe", path="/")
     return response_obj
 
-allowed_origins = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-]
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=settings.FRONTEND_URL,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]

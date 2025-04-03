@@ -1,22 +1,13 @@
 import secrets
-from typing import Annotated, Any, Literal
+from typing import Literal
 
 from pydantic import (
-    AnyUrl,
-    BeforeValidator,
     PostgresDsn,
     computed_field,
 )
 from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-def parse_cors(v: Any) -> list[str] | str:
-    if isinstance(v, str) and not v.startswith("["):
-        return [i.strip() for i in v.split(",")]
-    elif isinstance(v, list | str):
-        return v
-    raise ValueError(v)
 
 
 class Settings(BaseSettings):
@@ -26,17 +17,6 @@ class Settings(BaseSettings):
     DOMAIN: str = "localhost"
     ENVIRONMENT: Literal["local", "staging", "production", "test"] = "local"
 
-    @computed_field  # type: ignore[misc]
-    @property
-    def SERVER_HOST(self) -> str:
-        # Use HTTPS for anything other than local development
-        if self.ENVIRONMENT == "local":
-            return "http://localhost:8000"
-        return f"https://{self.DOMAIN}"
-
-    BACKEND_CORS_ORIGINS: Annotated[
-        list[AnyUrl] | str, BeforeValidator(parse_cors)
-    ] = []
 
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
@@ -58,11 +38,10 @@ class Settings(BaseSettings):
 
     GITHUB_OAUTH_CLIENT_ID: str = ""
     GITHUB_OAUTH_CLIENT_SECRET: str = ""
-    # ON_SUCCESS_REDIRECT_URL: str = "https://magpie-liberal-heavily.ngrok-free.app/authenticated-route"
-    # CALLBACK_URL: str = "https://magpie-liberal-heavily.ngrok-free.app/auth/github/callback"
     CALLBACK_URL: str = "http://localhost:8000/auth/github/callback"
     ON_SUCCESS_REDIRECT_URL: str = "http://localhost:8000/authenticated-route"
 
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # Logging
     LOG_FILE_PATH: str = "logs/app.log"
