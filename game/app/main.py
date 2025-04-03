@@ -51,7 +51,7 @@ class AuthenticationMiddleware:
         async with httpx.AsyncClient() as client:
             try:
                 users_response = await client.get(
-                    "http://localhost:8000/users/me",
+                    f"{settings.USERS_SERVICE_URL}/users/me",
                     headers={"Cookie": f"tictactoe={auth_cookie}"}
                 )
                 
@@ -163,7 +163,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     async with httpx.AsyncClient() as client:
         try:
             users_response = await client.get(
-                "http://localhost:8000/users/me",
+                f"{settings.USERS_SERVICE_URL}/users/me",
                 headers={"Cookie": f"tictactoe={websocket.cookies['tictactoe']}"}
             )
             print(users_response)
@@ -656,8 +656,7 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
 
 
 allowed_origins = [
-    "http://localhost:3000",
-    "http://localhost:8000",
+    settings.FRONTEND_URL,
 ]
 
 app.add_middleware(

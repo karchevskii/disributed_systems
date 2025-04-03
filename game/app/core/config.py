@@ -1,21 +1,8 @@
 import secrets
-from typing import Annotated, Any, Literal
+from typing import Literal
 
-from pydantic import (
-    AnyUrl,
-    BeforeValidator,
-    computed_field,
-)
+from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-def parse_cors(v: Any) -> list[str] | str:
-    if isinstance(v, str) and not v.startswith("["):
-        return [i.strip() for i in v.split(",")]
-    elif isinstance(v, list | str):
-        return v
-    raise ValueError(v)
-
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Distributed TicTacToe"
@@ -32,9 +19,9 @@ class Settings(BaseSettings):
             return "http://localhost:8000"
         return f"https://{self.DOMAIN}"
 
-    BACKEND_CORS_ORIGINS: Annotated[
-        list[AnyUrl] | str, BeforeValidator(parse_cors)
-    ] = []
+
+    USERS_SERVICE_URL: str
+    FRONTEND_URL: str
     
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
