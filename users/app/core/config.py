@@ -36,12 +36,12 @@ class Settings(BaseSettings):
             path=self.POSTGRES_DB,
         )
 
-    GITHUB_OAUTH_CLIENT_ID: str = ""
-    GITHUB_OAUTH_CLIENT_SECRET: str = ""
+    GITHUB_OAUTH_CLIENT_ID: str 
+    GITHUB_OAUTH_CLIENT_SECRET: str 
     CALLBACK_URL: str = "http://localhost:8000/auth/github/callback"
     ON_SUCCESS_REDIRECT_URL: str = "http://localhost:8000/authenticated-route"
 
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str
     COOKIE_DOMAIN: str
     
     # Logging
