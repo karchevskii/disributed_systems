@@ -9,5 +9,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ./alembic.ini /src/alembic.ini
 COPY ./app /src/app
 
-# CMD to run the application
-CMD ["gunicorn", "app.main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--log-level", "INFO", "--access-logfile", "-", "--error-logfile", "-"]
+# start the app
+ENTRYPOINT ["gunicorn", "app.main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--log-level", "INFO", "--access-logfile", "-", "--error-logfile", "-"]
