@@ -1,0 +1,25 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: game-history-db-cluster
+  namespace: tictactoe
+spec:
+  instances: 3
+
+  storage:
+    size: 1Gi
+    
+  # Define the default database that will be created
+  bootstrap:
+    initdb:
+      database: game-history
+      owner: game-history-user
+      secret:
+        name: game-history-service-creds
+    
+  # Configure application user credentials
+  # This user will have access to the database specified in bootstrap
+  managed:
+    roles:
+      - name: game-history-user
+        login: true
