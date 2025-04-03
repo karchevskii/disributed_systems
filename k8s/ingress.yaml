@@ -1,94 +1,19 @@
----
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: tictactoe-ingress
+  name: ingress
   namespace: tictactoe
   annotations:
     kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
-    # WebSocket support
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
-    # This annotation is crucial for WebSocket support
-    nginx.ingress.kubernetes.io/websocket-services: "game-service"
-    # Allow CORS (optional, for development)
-    nginx.ingress.kubernetes.io/enable-cors: "true"
 spec:
   rules:
-  - host: tictactoe.localhost  # Change this to your actual domain in production
-    http:
-      paths:
-      # Users Service
-      - path: /users/?(.*)
-        pathType: Prefix
-        backend:
-          service:
-            name: users-service
-            port:
-              number: 8000
-              
-      # Game Service (with WebSocket support)
-      - path: /game/?(.*)
-        pathType: Prefix
-        backend:
-          service:
-            name: game-service
-            port:
-              number: 8001
-              
-      # Game History Service
-      - path: /game-history/?(.*)
-        pathType: Prefix
-        backend:
-          service:
-            name: game-history-service
-            port:
-              number: 8002
-              
-      # Root path - redirect to frontend (optional)
-      - path: /?(.*) 
-        pathType: Prefix
-        backend:
-          service:
-            name: frontend-service  # If you have a frontend service
-            port:
-              number: 80
----
-# Service definitions for your microservices
-apiVersion: v1
-kind: Service
-metadata:
-  name: users-service
-  namespace: tictactoe
-spec:
-  ports:
-  - port: 8000
-    targetPort: 8000
-  selector:
-    app: users
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: game-service
-  namespace: tictactoe
-spec:
-  ports:
-  - port: 8001
-    targetPort: 8001
-  selector:
-    app: game
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: game-history-service
-  namespace: tictactoe
-spec:
-  ports:
-  - port: 8002
-    targetPort: 8002
-  selector:
-    app: game-history
+    - host: users.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: users
+                port:
+                  number: 8000

@@ -15,7 +15,7 @@ spec:
       database: users
       owner: users-user
       secret:
-        name: users-service-creds
+        name: users-postgres-service-creds
     
   # Configure application user credentials
   # This user will have access to the database specified in bootstrap
