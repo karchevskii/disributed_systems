@@ -6,7 +6,6 @@ from app.db import sessionmanager
 from contextlib import asynccontextmanager
 from app.deps import DBSessionDep
 from app.crud import get_games
-import app.consumer
 
 from app.schemes import GameDTO, GamesDTO
 
@@ -26,13 +25,6 @@ app = FastAPI(lifespan=lifespan)
 
 logger = get_logger(__name__)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.FRONTEND_URL,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
 
 class AuthenticationMiddleware:
     def __init__(self, app):
@@ -110,3 +102,15 @@ async def get_games_history(
     
     # Return wrapped in GamesDTO
     return GamesDTO(games=game_dtos)
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.FRONTEND_URL,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
