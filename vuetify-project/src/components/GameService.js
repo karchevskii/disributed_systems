@@ -1,7 +1,19 @@
 class GameService {
   constructor(apiBaseUrl, gameApiUrl, onSocketMessage, onError) {
-    this.apiBaseUrl = apiBaseUrl;
-    this.gameApiUrl = gameApiUrl;
+    // For development outside Docker
+    if (window.location.hostname === 'localhost') {
+      this.apiBaseUrl = 'http://localhost:8000';
+      this.gameApiUrl = 'http://localhost:8001';
+      this.gameHistoryApiUrl = 'http://localhost:8002';
+      this.wsHost = 'localhost:8001';
+    } else {
+      // For production/Docker environment
+      this.apiBaseUrl = 'http://auth-service:8000';
+      this.gameApiUrl = 'http://game-service:8001';
+      this.gameHistoryApiUrl = 'http://history-service:8000';
+      this.wsHost = 'game-service:8001';
+    }
+    
     this.onSocketMessage = onSocketMessage;
     this.onError = onError;
     this.socket = null;
@@ -97,14 +109,31 @@ class GameService {
     
     return await response.json();
   }
+  
+  // Game history methods
+  async getGameHistory() {
+    const response = await fetch(`${this.gameHistoryApiUrl}/games`, {
+      method: 'GET',
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to get game history: ' + response.statusText);
+    }
+    
+    return await response.json();
+  }
 
   // WebSocket methods
   connectToGameSocket(gameId) {
     // Close any existing socket connection
     this.closeSocket();
     
+    // Determine the appropriate WebSocket protocol
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    
     // Create WebSocket connection
-    this.socket = new WebSocket(`ws://localhost:8001/ws/game/${gameId}`);
+    this.socket = new WebSocket(`${wsProtocol}${this.wsHost}/ws/game/${gameId}`);
     
     // Set up event handlers
     this.socket.onopen = () => {

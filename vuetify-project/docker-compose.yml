@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Frontend
+  frontend:
+    build: ./frontend  # Directory containing your Vue.js app
+    ports:
+      - "8080:80"
+    networks:
+      - app-network
+
+  # Auth Service
+  auth-service:
+    image: your-auth-service-image  # Use your actual image or build from source
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_SERVER=db1
+      # Add any other required environment variables
+    networks:
+      - app-network
+    depends_on:
+      - db1
+
+  # Game Service
+  game-service:
+    image: your-game-service-image  # Use your actual image or build from source
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_HOST=redis
+      - USERS_SERVICE_URL=http://auth-service:8000
+      # Add any other required environment variables
+    networks:
+      - app-network
+    depends_on:
+      - redis
+      - auth-service
+
+  # Game History Service
+  history-service:
+    build: ./game-history  # Directory containing your history service
+    ports:
+      - "8002:8000"
+    environment:
+      - POSTGRES_SERVER=db1
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=gamehistory
+      - REDIS_HOST=redis
+      - USERS_SERVICE_URL=http://auth-service:8000
+      - FRONTEND_URL=http://localhost:8080
+    networks:
+      - app-network
+    depends_on:
+      - db1
+      - redis
+
+  # Database
+  db1:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=gamehistory
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  # Redis
+  redis:
+    image: redis:alpine
+    command: redis-server --requirepass password
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+
+volumes:
+  postgres_data:

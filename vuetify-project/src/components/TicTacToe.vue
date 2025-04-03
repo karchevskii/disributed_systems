@@ -97,6 +97,17 @@
                     <v-icon left>mdi-format-list-bulleted</v-icon>
                     Browse Open Games
                   </v-btn>
+                  
+                  <!-- View Game History -->
+                  <v-btn 
+                    color="success" 
+                    class="mb-3" 
+                    block 
+                    @click="showGameHistoryDialog = true"
+                  >
+                    <v-icon left>mdi-history</v-icon>
+                    View Game History
+                  </v-btn>
                 </div>
               </div>
               
@@ -192,6 +203,14 @@
         @refresh-open-games="fetchOpenGames"
         @join-open-game="joinOpenGame"
       />
+
+      <!-- Import Game History Dialog -->
+      <game-history
+        :showGameHistoryDialog="showGameHistoryDialog"
+        :gameHistoryApiUrl="gameService ? gameService.gameHistoryApiUrl : ''"
+        :userId="userId"
+        @update:showGameHistoryDialog="showGameHistoryDialog = $event"
+      />
       
       
       <!-- Snackbar for notifications -->
@@ -212,6 +231,7 @@ import GameBoard from './GameBoard.vue';
 import GameDialogs from './GameDialogs.vue';
 import OpenGamesDialog from './OpenGamesDialog.vue';
 import GameChat from './GameChat.vue';
+import GameHistory from './GameHistory.vue';
 import GameService from './GameService.js';
 
 export default {
@@ -220,7 +240,8 @@ export default {
     OpenGamesDialog,
     GameBoard,
     GameDialogs,
-    GameChat
+    GameChat,
+    GameHistory
   },
   
   mounted() {
@@ -260,6 +281,9 @@ export default {
       showJoinDialog: false,
       joinGameCode: '',
       showSymbolDialog: false, // New dialog for selecting X or O
+
+      // Game history
+      showGameHistoryDialog: false,
 
       // Open games
       showOpenGamesDialog: false,
