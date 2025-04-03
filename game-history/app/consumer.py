@@ -89,3 +89,16 @@ def start_redis_consumer():
     thread = threading.Thread(target=run_async_process, daemon=True)
     thread.start()
     return thread
+
+_consumer_thread = None
+
+def ensure_consumer_running():
+    """Ensure the consumer is running, starting it if needed"""
+    global _consumer_thread
+    if _consumer_thread is None or not _consumer_thread.is_alive():
+        _consumer_thread = start_redis_consumer()
+    return _consumer_thread
+
+# Auto-start on import if not running as main script
+if __name__ != "__main__":
+    ensure_consumer_running()

@@ -6,6 +6,7 @@ from app.db import sessionmanager
 from contextlib import asynccontextmanager
 from app.deps import DBSessionDep
 from app.crud import get_games
+import app.consumer
 
 from app.schemes import GameDTO, GamesDTO
 
