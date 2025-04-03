@@ -42,7 +42,8 @@ class Settings(BaseSettings):
     ON_SUCCESS_REDIRECT_URL: str = "http://localhost:8000/authenticated-route"
 
     FRONTEND_URL: str = "http://localhost:3000"
-
+    COOKIE_DOMAIN: str
+    
     # Logging
     LOG_FILE_PATH: str = "logs/app.log"
     DISABLE_EXISTING_LOGGERS: bool = False
