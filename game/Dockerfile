@@ -6,7 +6,6 @@ WORKDIR /src/
 COPY ./requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./alembic.ini /src/alembic.ini
 COPY ./app /src/app
 
 # start the app
