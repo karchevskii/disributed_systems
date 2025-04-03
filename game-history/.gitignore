@@ -163,7 +163,7 @@ cython_debug/
 images/
 .ruff_cache/
 *.env*
-logs
+logs/
 .vscode/
 .env.local
 !example.env

@@ -25,14 +25,9 @@ app = FastAPI(lifespan=lifespan)
 
 logger = get_logger(__name__)
 
-allowed_origins = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=settings.FRONTEND_URL,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -66,7 +61,7 @@ class AuthenticationMiddleware:
         async with httpx.AsyncClient() as client:
             try:
                 users_response = await client.get(
-                    "http://localhost:8000/users/me",
+                    f"{settings.USERS_SERVICE_URL}/users/me",
                     headers={"Cookie": f"tictactoe={auth_cookie}"}
                 )
                 

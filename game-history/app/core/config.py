@@ -1,23 +1,9 @@
 import secrets
-from typing import Annotated, Any, Literal
+from typing import Literal
 
-from pydantic import (
-    AnyUrl,
-    BeforeValidator,
-    PostgresDsn,
-    computed_field,
-)
+from pydantic import PostgresDsn, computed_field
 from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-def parse_cors(v: Any) -> list[str] | str:
-    if isinstance(v, str) and not v.startswith("["):
-        return [i.strip() for i in v.split(",")]
-    elif isinstance(v, list | str):
-        return v
-    raise ValueError(v)
-
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Distributed TicTacToe"
@@ -26,17 +12,8 @@ class Settings(BaseSettings):
     DOMAIN: str = "localhost"
     ENVIRONMENT: Literal["local", "staging", "production", "test"] = "local"
 
-    @computed_field  # type: ignore[misc]
-    @property
-    def SERVER_HOST(self) -> str:
-        # Use HTTPS for anything other than local development
-        if self.ENVIRONMENT == "local":
-            return "http://localhost:8000"
-        return f"https://{self.DOMAIN}"
-
-    BACKEND_CORS_ORIGINS: Annotated[
-        list[AnyUrl] | str, BeforeValidator(parse_cors)
-    ] = []
+    USERS_SERVICE_URL: str
+    FRONTEND_URL: str
 
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
