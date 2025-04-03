@@ -86,6 +86,17 @@
                     <v-icon left>mdi-account-multiple</v-icon>
                     Join Game
                   </v-btn>
+                  
+                  <!-- Browse Open Games -->
+                  <v-btn 
+                    color="info" 
+                    class="mb-3" 
+                    block 
+                    @click="showOpenGamesDialog = true"
+                  >
+                    <v-icon left>mdi-format-list-bulleted</v-icon>
+                    Browse Open Games
+                  </v-btn>
                 </div>
               </div>
               
@@ -161,6 +172,18 @@
         @confirm-create-game="confirmCreateGame"
         @join-game="joinGame"
       />
+
+      <!-- Import Open Games Dialog -->
+      <open-games-dialog
+        :showOpenGamesDialog="showOpenGamesDialog"
+        :openGames="openGames"
+        :loading="loadingOpenGames"
+        :error="openGamesError"
+        @update:showOpenGamesDialog="showOpenGamesDialog = $event"
+        @refresh-open-games="fetchOpenGames"
+        @join-open-game="joinOpenGame"
+      />
+      
       
       <!-- Snackbar for notifications -->
       <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000">
@@ -178,11 +201,13 @@
 <script>
 import GameBoard from './GameBoard.vue';
 import GameDialogs from './GameDialogs.vue';
+import OpenGamesDialog from './OpenGamesDialog.vue';
 import GameService from './GameService.js';
 
 export default {
   name: 'TicTacToe',
   components: {
+    OpenGamesDialog,
     GameBoard,
     GameDialogs
   },
@@ -224,6 +249,12 @@ export default {
       showJoinDialog: false,
       joinGameCode: '',
       showSymbolDialog: false, // New dialog for selecting X or O
+
+      // Open games
+      showOpenGamesDialog: false,
+      openGames: [],
+      loadingOpenGames: false,
+      openGamesError: '',
       selectedSymbol: null, // For storing selected symbol
       
       // Notifications
@@ -261,12 +292,25 @@ export default {
   
   created() {
     // Initialize GameService
+    const apiBaseUrl = 'http://localhost:8000';
+    const gameApiUrl = 'http://localhost:8001';
+    
+    // Store API URLs for direct access in component methods
+    this.apiBaseUrl = apiBaseUrl;
+    this.gameApiUrl = gameApiUrl;
     this.gameService = new GameService(
       'http://localhost:8000',
       'http://localhost:8001',
       this.handleSocketMessage.bind(this),
       this.showNotification.bind(this)
     );
+  },
+
+  watch: {
+    // Fetch open games when dialog is opened
+    showOpenGamesDialog(newVal) {
+      if (newVal === true) this.fetchOpenGames();
+    }
   },
   
   methods: {
@@ -394,6 +438,52 @@ export default {
         this.joinGameCode = gameCode;
         // Show a notification to log in first
         this.showNotification('Please log in to join the game', 'info');
+      }
+    },
+    
+    // Open Games methods
+    async fetchOpenGames() {
+      if (!this.isLoggedIn) return;
+      
+      this.loadingOpenGames = true;
+      this.openGamesError = '';
+      
+      try {
+        // Use Fetch API to get open games from backend
+        const response = await fetch(`${this.gameService.gameApiUrl}/games/open`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch open games: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        this.openGames = data;
+      } catch (error) {
+        console.error('Error fetching open games:', error);
+        this.openGamesError = error.message || 'Failed to fetch open games';
+      } finally {
+        this.loadingOpenGames = false;
+      }
+    },
+    
+    async joinOpenGame(gameId) {
+      try {
+        const gameData = await this.gameService.joinGame(gameId);
+        
+        // Determine player symbol from game data
+        const playerSymbol = gameData.players.x === this.userId ? 'X' : 'O';
+        
+        // Start the game
+        this.startGame(gameId, playerSymbol, 'human');
+        
+        this.showOpenGamesDialog = false;
+        this.showNotification('Successfully joined game!', 'success');
+      } catch (error) {
+        console.error('Error joining open game:', error);
+        this.showNotification('Error joining game: ' + error.message, 'error');
       }
     },
     
