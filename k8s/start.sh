@@ -37,7 +37,7 @@ sleep 30
 # Run port-forwards in parallel
 kubectl port-forward -n tictactoe svc/users-db-cluster-rw 5432:5432 &
 kubectl port-forward -n tictactoe svc/game-history-db-cluster-rw 5433:5432 &
-kubectl port-forward -n tictactoe svc/redis-primary 6379:6379 &
+kubectl port-forward -n tictactoe svc/redis 6379:6379 &
 minikube tunnel &
 
 # Save all background process IDs
