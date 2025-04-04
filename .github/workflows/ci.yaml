@@ -199,10 +199,10 @@ jobs:
             echo "VERSION_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build and Push Game History Image
+      - name: Build and Push frontend Image
         uses: docker/build-push-action@v4
         with:
-          context: ./game-history
+          context: ./frontend
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
