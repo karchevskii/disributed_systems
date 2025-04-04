@@ -4,14 +4,12 @@ class GameService {
     if (window.location.hostname === 'localhost') {
       this.apiBaseUrl = 'http://tictactoe.local/users-service';
       this.gameApiUrl = 'http://tictactoe.local/game-service';
-      // Updated URL path to match your backend's actual endpoint
       this.gameHistoryApiUrl = 'http://tictactoe.local/history-service';
       this.wsHost = 'tictactoe.local/game-service';
     } else {
       // For production/Docker environment
       this.apiBaseUrl = 'http://tictactoe.local/users-service';
       this.gameApiUrl = 'http://tictactoe.local/game-service';
-      // Updated URL path to match your backend's actual endpoint
       this.gameHistoryApiUrl = 'http://tictactoe.local/history-service';
       this.wsHost = 'tictactoe.local/game-service';
     }
@@ -114,16 +112,36 @@ class GameService {
   
   // Game history methods
   async getGameHistory() {
-    const response = await fetch(`${this.gameHistoryApiUrl}/games`, {
-      method: 'GET',
-      credentials: 'include'
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to get game history: ' + response.statusText);
+    try {
+      const response = await fetch(`${this.gameHistoryApiUrl}/games`, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to get game history: ' + response.statusText);
+      }
+      
+      // Get the raw text first
+      const responseText = await response.text();
+      
+      // Try to parse the JSON
+      try {
+        return JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error parsing game history JSON:', parseError);
+        console.log('Raw response:', responseText);
+        
+        // If there's a parsing error, return an empty data structure
+        // that matches what the component expects
+        return {
+          games: []
+        };
+      }
+    } catch (error) {
+      console.error('Error in getGameHistory:', error);
+      throw error;
     }
-    
-    return await response.json();
   }
 
   // WebSocket methods
