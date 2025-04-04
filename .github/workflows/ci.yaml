@@ -7,6 +7,7 @@ on:
       - 'users/**'
       - 'game/**'
       - 'game-history/**'
+      - 'frontend/**'
       - '.github/workflows/ci.yaml'
   pull_request:
     branches: [ main ]
@@ -14,6 +15,7 @@ on:
       - 'users/**'
       - 'game/**'
       - 'game-history/**'
+      - 'frontend/**'
       - '.github/workflows/ci.yaml'
 
 jobs:
@@ -23,6 +25,7 @@ jobs:
       users_changed: ${{ steps.filter.outputs.users }}
       game_changed: ${{ steps.filter.outputs.game }}
       gamehistory_changed: ${{ steps.filter.outputs.gamehistory }}
+      frontend_changed: ${{ steps.filter.outputs.frontend }}
     
     steps:
       - name: Checkout
@@ -41,8 +44,8 @@ jobs:
               - 'game/**'
             gamehistory:
               - 'game-history/**'
-            redis_consumer:
-              - 'redis_consumer/**'
+            frontend:
+              - 'frontend/**'
 
   build-users:
     needs: detect-changes
@@ -166,3 +169,44 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/distr_sys-game_history_service:${{ steps.version.outputs.SHA_TAG }}
           cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/distr_sys-game_history_service:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/distr_sys-game_history_service:buildcache,mode=max
+
+  build-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend_changed == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate Version Tag
+        id: version
+        run: |
+          echo "SHA_TAG=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "VERSION_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and Push Game History Image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./game-history
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/distr_sys-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/distr_sys-frontend:${{ steps.version.outputs.SHA_TAG }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/distr_sys-frontend:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/distr_sys-frontend:buildcache,mode=max
