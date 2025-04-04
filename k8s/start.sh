@@ -27,6 +27,7 @@ sleep 5
 kubectl apply -f users.yaml
 kubectl apply -f game-history.yaml
 kubectl apply -f game.yaml
+kubectl apply -f frontend.yaml
 
 #Ingress
 kubectl apply -f ingress.yaml
