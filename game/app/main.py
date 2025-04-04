@@ -18,7 +18,7 @@ app = FastAPI(title=settings.PROJECT_NAME,
               root_path="/game-service")
 
 
-redis = redis.Redis(
+redis_client = redis.Redis(
     host=settings.REDIS_HOST,
     port=settings.REDIS_PORT,
     db=settings.REDIS_DB,
@@ -190,7 +190,7 @@ class ConnectionManager:
         }
         
         # Use a separate Redis client for publishing
-        redis.publish('websocket_broadcasts', json.dumps(redis_message))
+        redis_client.publish('websocket_broadcasts', json.dumps(redis_message))
 
 
 # Initialize the manager
@@ -272,7 +272,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
             return
 
     # Get game from Redis
-    game_data_str = redis.get(f"game:{game_id}")
+    game_data_str = redis_client.get(f"game:{game_id}")
     if not game_data_str:
         await websocket.close(code=1008, reason="Game not found")
         return
@@ -316,7 +316,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 # Handle different message types
                 if data["type"] == "move":
                     # Get fresh game state from Redis
-                    game_data_str = redis.get(f"game:{game_id}")
+                    game_data_str = redis_client.get(f"game:{game_id}")
                     if not game_data_str:
                         await websocket.send_json({
                             "type": "error",
@@ -360,12 +360,12 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                         game_data["winner"] = winner
                         game_data["status"] = "completed"
                         # send complete game to Redis message queue to be saved in the database by another service
-                        redis.xadd("completed_games", {
+                        redis_client.xadd("completed_games", {
                                    "data": json.dumps(game_data)})
                     elif "" not in game_data["board"]:  # Board is full
                         game_data["status"] = "completed"
                         game_data["winner"] = "draw"
-                        redis.xadd("completed_games", {
+                        redis_client.xadd("completed_games", {
                                    "data": json.dumps(game_data)})
                     else:
                         # Switch turns
@@ -375,7 +375,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                         )
 
                     # Save updated game state to Redis
-                    redis.set(f"game:{game_id}", json.dumps(game_data))
+                    redis_client.set(f"game:{game_id}", json.dumps(game_data))
 
                     # Broadcast updated game state to all players
                     await manager.broadcast(
@@ -423,7 +423,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 game_data["current_player"] = user["id"]
 
                 # Save updated game state to Redis
-                redis.set(f"game:{game_id}", json.dumps(game_data))
+                redis_client.set(f"game:{game_id}", json.dumps(game_data))
                 logger.debug(
                     f"Saved initial game state to Redis for game {game_id}")
 
@@ -440,7 +440,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 # Handle different message types
                 if data["type"] == "move":
                     # Get fresh game state from Redis
-                    game_data_str = redis.get(f"game:{game_id}")
+                    game_data_str = redis_client.get(f"game:{game_id}")
                     if not game_data_str:
                         await websocket.send_json({
                             "type": "error",
@@ -491,9 +491,9 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                     if winner:
                         game_data["winner"] = winner
                         game_data["status"] = "completed"
-                        redis.xadd("completed_games", {
+                        redis_client.xadd("completed_games", {
                                    "data": json.dumps(game_data)})
-                        redis.set(f"game:{game_id}", json.dumps(game_data))
+                        redis_client.set(f"game:{game_id}", json.dumps(game_data))
                         await websocket.send_json({
                             "type": "game_state",
                             "game": game_data
@@ -502,9 +502,9 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                     elif "" not in game_data["board"]:  # Board is full
                         game_data["status"] = "completed"
                         game_data["winner"] = "draw"
-                        redis.xadd("completed_games", {
+                        redis_client.xadd("completed_games", {
                                    "data": json.dumps(game_data)})
-                        redis.set(f"game:{game_id}", json.dumps(game_data))
+                        redis_client.set(f"game:{game_id}", json.dumps(game_data))
                         await websocket.send_json({
                             "type": "game_state",
                             "game": game_data
@@ -516,7 +516,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                     game_data["current_player"] = "bot"
 
                     # Save interim state before bot makes its move
-                    redis.set(f"game:{game_id}", json.dumps(game_data))
+                    redis_client.set(f"game:{game_id}", json.dumps(game_data))
                     await websocket.send_json({
                         "type": "game_state",
                         "game": game_data
@@ -575,19 +575,19 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                     if winner:
                         game_data["winner"] = winner
                         game_data["status"] = "completed"
-                        redis.xadd("completed_games", {
+                        redis_client.xadd("completed_games", {
                                    "data": json.dumps(game_data)})
                     elif "" not in game_data["board"]:  # Board is full
                         game_data["status"] = "completed"
                         game_data["winner"] = "draw"
-                        redis.xadd("completed_games", {
+                        redis_client.xadd("completed_games", {
                                    "data": json.dumps(game_data)})
 
                     # Change turn back to player
                     game_data["current_player"] = user["id"]
 
                     # Save updated game state to Redis
-                    redis.set(f"game:{game_id}", json.dumps(game_data))
+                    redis_client.set(f"game:{game_id}", json.dumps(game_data))
 
                     # Send updated game state to player
                     await websocket.send_json({
@@ -656,11 +656,11 @@ def check_winner(board):
 @app.get("/games/open", response_model=list[CreateGameDTO])
 async def get_open_games(user=Depends(get_current_user)):
     # Get list of open game IDs
-    open_game_ids = redis.smembers("open_games")
+    open_game_ids = redis_client.smembers("open_games")
 
     open_games = []
     for game_id in open_game_ids:
-        game_data_str = redis.get(f"game:{game_id}")
+        game_data_str = redis_client.get(f"game:{game_id}")
         if game_data_str:
             game_data = json.loads(game_data_str)
             # Only show games that the user is not already in and that are waiting for players
@@ -709,12 +709,12 @@ async def create_game(data: CreateGameScheme, user=Depends(get_current_user)):
     }
 
     # Store game in Redis
-    redis.set(f"game:{game_id}", json.dumps(game_data))
+    redis_client.set(f"game:{game_id}", json.dumps(game_data))
 
     # Add to user's games list and to the list of open games
     # redis.sadd(f"user:{user['id']}:games", game_id)
     if type == "multiplayer":
-        redis.sadd("open_games", game_id)
+        redis_client.sadd("open_games", game_id)
 
     return CreateGameDTO(**game_data)
 
@@ -722,7 +722,7 @@ async def create_game(data: CreateGameScheme, user=Depends(get_current_user)):
 @app.post("/game/join/{game_id}")
 async def join_game(game_id: str, user=Depends(get_current_user)):
     # Get game from Redis
-    game_data_str = redis.get(f"game:{game_id}")
+    game_data_str = redis_client.get(f"game:{game_id}")
     if not game_data_str:
         raise HTTPException(status_code=404, detail="Game not found")
 
@@ -750,8 +750,8 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
 
     game_data["status"] = "active"
     # Update game in Redis
-    redis.set(f"game:{game_id}", json.dumps(game_data))
-    redis.srem("open_games", game_id)  # Remove from open games
+    redis_client.set(f"game:{game_id}", json.dumps(game_data))
+    redis_client.srem("open_games", game_id)  # Remove from open games
     # redis.sadd(f"user:{user['id']}:games", game_id)  # Add to user's games
 
     return game_data
