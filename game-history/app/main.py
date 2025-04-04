@@ -43,6 +43,9 @@ class AuthenticationMiddleware:
         if request.url.path == "/health":
             return await self.app(scope, receive, send)
         
+        if request.url.path == "/docs":
+            return await self.app(scope, receive, send)
+
         # Extract the cookie
         auth_cookie = request.cookies.get("tictactoe")
         
