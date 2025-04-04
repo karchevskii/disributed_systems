@@ -107,30 +107,23 @@ class ConnectionManager:
         self.instance_id = str(uuid.uuid4())
         
         # Subscribe to the websocket broadcast channel
-        self.redis_pubsub.subscribe(**{'websocket_broadcasts': self._handle_pubsub_message})
+        self.redis_pubsub.subscribe('websocket_broadcasts')
         
-        # Start listening thread
-        self._start_pubsub_listener()
+        # Start async task to poll for messages
+        asyncio.create_task(self._poll_for_messages())
     
-    def _start_pubsub_listener(self):
-        """Start listening for pub/sub messages in a background thread"""
-        def listener():
-            # Create an event loop for the thread
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+    async def _poll_for_messages(self):
+        """Poll for messages from Redis in an async way"""
+        while True:
+            message = self.redis_pubsub.get_message(timeout=0.01)
+            if message and message['type'] == 'message':
+                await self._handle_pubsub_message(message)
             
-            # Process messages in the loop
-            self.redis_pubsub.run_in_thread(sleep_time=0.001, daemon=True)
-        
-        # Start the thread
-        thread = threading.Thread(target=listener, daemon=True)
-        thread.start()
+            # Don't hog the event loop
+            await asyncio.sleep(0.01)
     
     async def _handle_pubsub_message(self, message):
         """Handle incoming pub/sub messages"""
-        if message['type'] != 'message':
-            return
-            
         try:
             data = json.loads(message['data'])
             
@@ -152,46 +145,6 @@ class ConnectionManager:
                             logger.error(f"Error sending to player {player_id}: {e}")
         except Exception as e:
             logger.error(f"Error processing pub/sub message: {e}")
-
-    async def connect(self, websocket: WebSocket, game_id: str, player_id: str):
-        """Connect a player's websocket"""
-        await websocket.accept()
-        if game_id not in self.active_connections:
-            self.active_connections[game_id] = {}
-        self.active_connections[game_id][player_id] = websocket
-
-    def disconnect(self, game_id: str, player_id: str):
-        """Disconnect a player"""
-        if game_id in self.active_connections:
-            if player_id in self.active_connections[game_id]:
-                del self.active_connections[game_id][player_id]
-            if not self.active_connections[game_id]:  # If empty
-                del self.active_connections[game_id]
-
-    async def send_personal_message(self, message: dict, game_id: str, player_id: str):
-        """Send message to a specific player"""
-        if game_id in self.active_connections and player_id in self.active_connections[game_id]:
-            await self.active_connections[game_id][player_id].send_json(message)
-
-    async def broadcast(self, message: dict, game_id: str, exclude: Optional[str] = None):
-        """Broadcast a message to all players in a game across all instances"""
-        # First, send to all local connections
-        if game_id in self.active_connections:
-            for player_id, connection in self.active_connections[game_id].items():
-                if player_id != exclude:
-                    await connection.send_json(message)
-        
-        # Then, publish to Redis for other instances
-        redis_message = {
-            'instance_id': self.instance_id,
-            'game_id': game_id,
-            'exclude_player': exclude,
-            'payload': message
-        }
-        
-        # Use a separate Redis client for publishing
-        redis_client.publish('websocket_broadcasts', json.dumps(redis_message))
-
 
 # Initialize the manager
 manager = ConnectionManager()
@@ -752,7 +705,6 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     # Update game in Redis
     redis_client.set(f"game:{game_id}", json.dumps(game_data))
     redis_client.srem("open_games", game_id)  # Remove from open games
-    # redis.sadd(f"user:{user['id']}:games", game_id)  # Add to user's games
 
     return game_data
 
