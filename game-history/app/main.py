@@ -44,7 +44,7 @@ class AuthenticationMiddleware:
 
         request = Request(scope, receive)
 
-        if request.url.path in ["/docs", "/openapi.json", "/health"]:
+        if request.url.path in ["/history-service/docs", "/history-service/openapi.json", "/history-service/health"]:
             return await self.app(scope, receive, send)
 
         # Extract the cookie
