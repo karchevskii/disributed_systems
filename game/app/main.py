@@ -40,6 +40,9 @@ class AuthenticationMiddleware:
         if request.url.path == "/health":
             return await self.app(scope, receive, send)
         
+        if request.url.path == "/docs":
+            return await self.app(scope, receive, send)
+        
         # Extract the cookie
         auth_cookie = request.cookies.get("tictactoe")
         
@@ -655,7 +658,9 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     
     return game_data
 
-
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 
 allowed_origins = [
