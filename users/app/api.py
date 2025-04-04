@@ -7,7 +7,7 @@ from app.schemas import UserCreate
 from app.db import get_async_session, get_user_db
 
 router = APIRouter(
-    prefix="/users-service/auth",
+    prefix="/auth",
     tags=["auth"],
 )
 
