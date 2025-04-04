@@ -1,121 +1,332 @@
+# apiVersion: apps/v1
+# kind: StatefulSet
+# metadata:
+#   name: redis-primary
+#   namespace: tictactoe
+# spec:
+#   serviceName: redis-primary
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: redis
+#       role: primary
+#   template:
+#     metadata:
+#       labels:
+#         app: redis
+#         role: primary
+#     spec:
+#       containers:
+#       - name: redis
+#         image: docker.io/bitnami/redis:7.4
+#         ports:
+#         - containerPort: 6379
+#           name: redis
+#         env:
+#         - name: REDIS_REPLICATION_MODE
+#           value: "master"
+#         - name: REDIS_PASSWORD
+#           valueFrom:
+#             secretKeyRef:
+#               name: redis-creds
+#               key: redis-password
+#         - name: REDIS_DISABLE_COMMANDS
+#           value: "FLUSHDB,FLUSHALL"
+#         volumeMounts:
+#         - name: redis-data
+#           mountPath: /bitnami/redis/data
+#   volumeClaimTemplates:
+#   - metadata:
+#       name: redis-data
+#     spec:
+#       accessModes: ["ReadWriteOnce"]
+#       resources:
+#         requests:
+#           storage: 1Gi
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: redis-primary
+#   namespace: tictactoe
+#   labels:
+#     app: redis
+#     role: primary
+# spec:
+#   ports:
+#   - port: 6379
+#     targetPort: redis
+#   selector:
+#     app: redis
+#     role: primary
+# ---
+# apiVersion: apps/v1
+# kind: StatefulSet
+# metadata:
+#   name: redis-secondary
+#   namespace: tictactoe
+# spec:
+#   serviceName: redis-secondary
+#   replicas: 2
+#   selector:
+#     matchLabels:
+#       app: redis
+#       role: secondary
+#   template:
+#     metadata:
+#       labels:
+#         app: redis
+#         role: secondary
+#     spec:
+#       containers:
+#       - name: redis
+#         image: docker.io/bitnami/redis:7.4
+#         ports:
+#         - containerPort: 6379
+#           name: redis
+#         env:
+#         - name: REDIS_REPLICATION_MODE
+#           value: "slave"
+#         - name: REDIS_MASTER_HOST
+#           value: "redis-primary"
+#         - name: REDIS_MASTER_PORT_NUMBER
+#           value: "6379"
+#         - name: REDIS_MASTER_PASSWORD
+#           valueFrom:
+#             secretKeyRef:
+#               name: redis-creds
+#               key: redis-password
+#         - name: REDIS_PASSWORD
+#           valueFrom:
+#             secretKeyRef:
+#               name: redis-creds
+#               key: redis-password
+#         - name: REDIS_DISABLE_COMMANDS
+#           value: "FLUSHDB,FLUSHALL"
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: redis-secondary
+#   namespace: tictactoe
+#   labels:
+#     app: redis
+#     role: secondary
+# spec:
+#   ports:
+#   - port: 6379
+#     targetPort: redis
+#   selector:
+#     app: redis
+#     role: secondary
+
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: tictactoe
+data:
+  master.conf: |
+    dir /data
+    appendonly yes
+    protected-mode no
+    requirepass ${REDIS_PASSWORD}
+    masterauth ${REDIS_PASSWORD}
+  slave.conf: |
+    dir /data
+    appendonly yes
+    protected-mode no
+    requirepass ${REDIS_PASSWORD}
+    masterauth ${REDIS_PASSWORD}
+    slaveof redis-0.redis 6379
+  sentinel.conf: |
+    dir /data
+    sentinel monitor mymaster 127.0.0.1 6379 2
+    sentinel auth-pass mymaster ${REDIS_PASSWORD}
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel parallel-syncs mymaster 1
+    sentinel failover-timeout mymaster 60000
+    protected-mode no
+    # Enable DNS resolution
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: tictactoe
+  labels:
+    app: redis
+spec:
+  ports:
+  - port: 6379
+    name: redis
+  - port: 26379
+    name: sentinel
+  clusterIP: None
+  selector:
+    app: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-read
+  namespace: tictactoe
+  labels:
+    app: redis
+spec:
+  ports:
+  - port: 6379
+    name: redis
+  selector:
+    app: redis
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: redis-primary
+  name: redis
   namespace: tictactoe
 spec:
-  serviceName: redis-primary
-  replicas: 1
+  serviceName: redis
+  replicas: 2
   selector:
     matchLabels:
       app: redis
-      role: primary
   template:
     metadata:
       labels:
         app: redis
-        role: primary
     spec:
+      initContainers:
+      - name: config
+        image: docker.io/bitnami/minideb:latest
+        command: ['bash', '-c']
+        args:
+        - |
+          # Install envsubst if needed
+          apt-get update && apt-get install -y gettext-base
+          
+          export REDIS_PASSWORD=$(cat /etc/redis-password/redis-password)
+          cp /readonly-config/master.conf /config/redis.conf.template
+          if [[ ${HOSTNAME} != 'redis-0' ]]; then
+            cp /readonly-config/slave.conf /config/redis.conf.template
+          fi
+          cp /readonly-config/sentinel.conf /config/sentinel.conf.template
+          echo "sentinel announce-ip ${HOSTNAME}.redis" >> /config/sentinel.conf.template
+          
+          envsubst < /config/redis.conf.template > /config/redis.conf
+          envsubst < /config/sentinel.conf.template > /config/sentinel.conf
+        env:
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: redis-creds
+                key: redis-password
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: config-map
+          mountPath: /readonly-config
+        - name: redis-password
+          mountPath: /etc/redis-password
+          readOnly: true
       containers:
       - name: redis
-        image: docker.io/bitnami/redis:7.4
+        image: redis:7-alpine
+        command: ["redis-server"]
+        args: ["/config/redis.conf"]
         ports:
         - containerPort: 6379
           name: redis
         env:
-        - name: REDIS_REPLICATION_MODE
-          value: "master"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: redis-creds
               key: redis-password
-        - name: REDIS_DISABLE_COMMANDS
-          value: "FLUSHDB,FLUSHALL"
         volumeMounts:
-        - name: redis-data
-          mountPath: /bitnami/redis/data
+        - name: data
+          mountPath: /data
+        - name: config
+          mountPath: /config
+        - name: redis-password
+          mountPath: /etc/redis-password
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -a $(cat /etc/redis-password/redis-password) ping
+          initialDelaySeconds: 15
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -a $(cat /etc/redis-password/redis-password) ping
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+      - name: sentinel
+        image: redis:7-alpine
+        command: ["redis-sentinel"]
+        args: ["/config/sentinel.conf"]
+        ports:
+        - containerPort: 26379
+          name: sentinel
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-creds
+              key: redis-password
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: redis-password
+          mountPath: /etc/redis-password
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -p 26379 ping
+          initialDelaySeconds: 15
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -p 26379 ping
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+      volumes:
+      - name: config
+        emptyDir: {}
+      - name: config-map
+        configMap:
+          name: redis-config
+      - name: redis-password
+        secret:
+          secretName: redis-creds
   volumeClaimTemplates:
   - metadata:
-      name: redis-data
+      name: data
     spec:
       accessModes: ["ReadWriteOnce"]
       resources:
         requests:
           storage: 1Gi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis-primary
-  namespace: tictactoe
-  labels:
-    app: redis
-    role: primary
-spec:
-  ports:
-  - port: 6379
-    targetPort: redis
-  selector:
-    app: redis
-    role: primary
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: redis-secondary
-  namespace: tictactoe
-spec:
-  serviceName: redis-secondary
-  replicas: 2
-  selector:
-    matchLabels:
-      app: redis
-      role: secondary
-  template:
-    metadata:
-      labels:
-        app: redis
-        role: secondary
-    spec:
-      containers:
-      - name: redis
-        image: docker.io/bitnami/redis:7.4
-        ports:
-        - containerPort: 6379
-          name: redis
-        env:
-        - name: REDIS_REPLICATION_MODE
-          value: "slave"
-        - name: REDIS_MASTER_HOST
-          value: "redis-primary"
-        - name: REDIS_MASTER_PORT_NUMBER
-          value: "6379"
-        - name: REDIS_MASTER_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: redis-creds
-              key: redis-password
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: redis-creds
-              key: redis-password
-        - name: REDIS_DISABLE_COMMANDS
-          value: "FLUSHDB,FLUSHALL"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis-secondary
-  namespace: tictactoe
-  labels:
-    app: redis
-    role: secondary
-spec:
-  ports:
-  - port: 6379
-    targetPort: redis
-  selector:
-    app: redis
-    role: secondary

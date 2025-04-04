@@ -27,7 +27,7 @@ spec:
                 echo "Redis is ready!"']
             env:
               - name: REDIS_HOST
-                value: "redis-primary"
+                value: "redis"
               - name: REDIS_PORT
                 value: "6379"
               - name: REDIS_PASSWORD
@@ -44,7 +44,7 @@ spec:
             - containerPort: 8000
           env:
               - name: REDIS_HOST
-                value: "redis-primary"
+                value: "redis"
               - name: REDIS_PORT
                 value: "6379"
               - name: REDIS_DB
@@ -56,8 +56,8 @@ spec:
                     key: redis-password
               - name: USERS_SERVICE_URL
                 value: "http://users:8000/users-service"
-              - name: FRONTEND_URL
-                value: "http://localhost:3000"
+              - name: CORS_URL
+                value: "http://tictactoe.local/"
 
           readinessProbe:
             httpGet:
@@ -73,8 +73,8 @@ spec:
             periodSeconds: 10
           resources:
             limits:
-              cpu: "1000m"
-              memory: "512Mi"
+              cpu: "512m"
+              memory: "400Mi"
             requests:
               cpu: "250m"
               memory: "256Mi"
