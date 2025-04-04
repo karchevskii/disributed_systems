@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game
+  namespace: tictactoe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: game
+  template:
+    metadata:
+      labels:
+        app: game
+    spec:
+      initContainers:
+          - name: wait-redis
+            image: redis:7-alpine
+            imagePullPolicy: IfNotPresent
+            command:
+              [
+                'sh', '-c',
+                'until redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} ping | grep "PONG"; 
+                do echo "Waiting for Redis to be ready..."; 
+                sleep 2; 
+                done;
+                echo "Redis is ready!"']
+            env:
+              - name: REDIS_HOST
+                value: "redis-primary"
+              - name: REDIS_PORT
+                value: "6379"
+              - name: REDIS_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: redis-creds
+                    key: redis-password
+
+      containers:
+        - name: game
+          image: karchevskii/distr_sys-game_service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+              - name: REDIS_HOST
+                value: "redis-primary"
+              - name: REDIS_PORT
+                value: "6379"
+              - name: REDIS_DB
+                value: "0"
+              - name: REDIS_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: redis-creds
+                    key: redis-password
+              - name: USERS_SERVICE_URL
+                value: "http://users:8000"
+              - name: FRONTEND_URL
+                value: "http://localhost:3000"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game
+  namespace: tictactoe
+spec:
+  selector:
+    app: game
+  ports:
+    - port: 8000
+      targetPort: 8000

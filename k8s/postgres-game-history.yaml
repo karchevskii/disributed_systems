@@ -15,7 +15,7 @@ spec:
       database: game-history
       owner: game-history-user
       secret:
-        name: game-history-service-creds
+        name: game-history-postgres-service-creds
     
   # Configure application user credentials
   # This user will have access to the database specified in bootstrap

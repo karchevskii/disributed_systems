@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-history
+  namespace: tictactoe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: game-history
+  template:
+    metadata:
+      labels:
+        app: game-history
+    spec:
+      initContainers:
+          - name: wait-database
+            image: postgres:14-alpine
+            imagePullPolicy: IfNotPresent  # Only pull if not available locally
+            command:
+              [
+                'sh', '-c',
+                'until pg_isready -h ${POSTGRES_SERVER} -p 5432; 
+                do echo "Waiting for database to be ready..."; 
+                sleep 2; 
+                done;']
+            env:
+              - name: POSTGRES_SERVER
+                value: "game-history-db-cluster-rw"
+          - name: perform-migrations
+            image: karchevskii/distr_sys-game_history_service:latest
+            imagePullPolicy: Always
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                echo "Environment variables:"
+                env | grep -i postgres
+                echo "Testing database connection..."
+                PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_SERVER -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1;"
+                echo "Running migrations..."
+                alembic upgrade head || { echo "Migration failed with code $?"; exit 1; }
+                echo "Migrations completed successfully"
+            env:
+              - name: POSTGRES_SERVER
+                value: "game-history-db-cluster-rw"
+              - name: POSTGRES_PORT
+                value: "5432"
+              - name: POSTGRES_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: game-history-postgres-service-creds
+                    key: password
+              - name: POSTGRES_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: game-history-postgres-service-creds
+                    key: username
+              - name: POSTGRES_DB
+                valueFrom:
+                  secretKeyRef:
+                    name: game-history-postgres-service-creds
+                    key: dbname
+              - name: USERS_SERVICE_URL
+                value: "http://users:8000"
+              - name: FRONTEND_URL
+                value: "http://localhost:3000"
+          - name: wait-redis
+            image: redis:7-alpine
+            imagePullPolicy: IfNotPresent
+            command:
+              [
+                'sh', '-c',
+                'until redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} ping | grep "PONG"; 
+                do echo "Waiting for Redis to be ready..."; 
+                sleep 2; 
+                done;
+                echo "Redis is ready!"']
+            env:
+              - name: REDIS_HOST
+                value: "redis-primary"
+              - name: REDIS_PORT
+                value: "6379"
+              - name: REDIS_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: redis-creds
+                    key: redis-password
+
+      containers:
+        - name: game-history
+          image: karchevskii/distr_sys-game_history_service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+              - name: POSTGRES_SERVER
+                value: "game-history-db-cluster-rw"
+              - name: POSTGRES_PORT
+                value: "5432"
+              - name: POSTGRES_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: game-history-postgres-service-creds
+                    key: password
+              - name: POSTGRES_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: game-history-postgres-service-creds
+                    key: username
+              - name: POSTGRES_DB
+                valueFrom:
+                  secretKeyRef:
+                    name: game-history-postgres-service-creds
+                    key: dbname
+              - name: REDIS_HOST
+                value: "redis-primary"
+              - name: REDIS_PORT
+                value: "6379"
+              - name: REDIS_DB
+                value: "0"
+              - name: REDIS_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: redis-creds
+                    key: redis-password
+              - name: USERS_SERVICE_URL
+                value: "http://users:8000"
+              - name: FRONTEND_URL
+                value: "http://localhost:3000"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-history
+  namespace: tictactoe
+spec:
+  selector:
+    app: game-history
+  ports:
+    - port: 8000
+      targetPort: 8000

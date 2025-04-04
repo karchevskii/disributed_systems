@@ -40,6 +40,9 @@ spec:
                 echo "Running migrations..."
                 alembic upgrade head || { echo "Migration failed with code $?"; exit 1; }
                 echo "Migrations completed successfully"
+            envFrom:
+              - secretRef:
+                  name: users-service-creds
             env:
               - name: POSTGRES_SERVER
                 value: "users-db-cluster-rw"

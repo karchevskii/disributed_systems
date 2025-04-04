@@ -1,28 +1,3 @@
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: tictactoe
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: redis-config
-  namespace: tictactoe
-data:
-  redis.conf: |
-    disable-command FLUSHDB
-    disable-command FLUSHALL
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: redis-secrets
-  namespace: tictactoe
-type: Opaque
-data:
-  redis-password: cGFzc3dvcmQ=  # "password" base64 encoded
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -53,7 +28,7 @@ spec:
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: redis-secrets
+              name: redis-creds
               key: redis-password
         - name: REDIS_DISABLE_COMMANDS
           value: "FLUSHDB,FLUSHALL"
@@ -92,7 +67,7 @@ metadata:
   namespace: tictactoe
 spec:
   serviceName: redis-secondary
-  replicas: 2  # You can have multiple replicas
+  replicas: 2
   selector:
     matchLabels:
       app: redis
@@ -119,12 +94,12 @@ spec:
         - name: REDIS_MASTER_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: redis-secrets
+              name: redis-creds
               key: redis-password
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: redis-secrets
+              name: redis-creds
               key: redis-password
         - name: REDIS_DISABLE_COMMANDS
           value: "FLUSHDB,FLUSHALL"

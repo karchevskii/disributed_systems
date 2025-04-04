@@ -3,11 +3,10 @@ kind: Ingress
 metadata:
   name: ingress
   namespace: tictactoe
-  annotations:
-    kubernetes.io/ingress.class: "nginx"
 spec:
+  ingressClassName: nginx
   rules:
-    - host: users.local
+    - host: users.tictactoe.local
       http:
         paths:
           - path: /
@@ -15,5 +14,25 @@ spec:
             backend:
               service:
                 name: users
+                port:
+                  number: 8000
+    - host: game.tictactoe.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: game
+                port:
+                  number: 8000
+    - host: history.tictactoe.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: game-history
                 port:
                   number: 8000
