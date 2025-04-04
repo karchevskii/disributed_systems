@@ -1,38 +1,34 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ingress
+  name: tictactoe-ingress
   namespace: tictactoe
+  # annotations:
+    # nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
-    - host: users.tictactoe.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: users
-                port:
-                  number: 8000
-    - host: game.tictactoe.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: game
-                port:
-                  number: 8000
-    - host: history.tictactoe.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: game-history
-                port:
-                  number: 8000
+  - host: tictactoe.local
+    http:
+      paths:
+      - path: /users-service
+        pathType: Prefix
+        backend:
+          service:
+            name: users
+            port:
+              number: 8000
+      - path: /game-service
+        pathType: Prefix
+        backend:
+          service:
+            name: game
+            port:
+              number: 8000
+      - path: /history-service
+        pathType: Prefix
+        backend:
+          service:
+            name: game-history
+            port:
+              number: 8000

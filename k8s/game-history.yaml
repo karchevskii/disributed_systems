@@ -124,19 +124,19 @@ spec:
                     name: redis-creds
                     key: redis-password
               - name: USERS_SERVICE_URL
-                value: "http://users:8000"
+                value: "http://users:8000/users-service"
               - name: FRONTEND_URL
                 value: "http://localhost:3000"
 
           readinessProbe:
             httpGet:
-              path: /health
+              path: /history-service/health
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             httpGet:
-              path: /health
+              path: /history-service/health
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10

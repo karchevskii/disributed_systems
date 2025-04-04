@@ -96,13 +96,13 @@ spec:
               
           readinessProbe:
             httpGet:
-              path: /health
+              path: /users-service/health
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             httpGet:
-              path: /health
+              path: /users-service/health
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
