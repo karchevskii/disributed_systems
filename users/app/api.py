@@ -7,7 +7,7 @@ from app.schemas import UserCreate
 from app.db import get_async_session, get_user_db
 
 router = APIRouter(
-    prefix="/auth",
+    prefix="/users-service/auth",
     tags=["auth"],
 )
 
@@ -16,7 +16,7 @@ get_user_db_context = contextlib.asynccontextmanager(get_user_db)
 get_user_manager_context = contextlib.asynccontextmanager(get_user_manager)
 
 
-@router.get("/create-guest")
+@router.get("/users-service/create-guest")
 async def create_guest():
     try:
         # random email with uuid
