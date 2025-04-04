@@ -36,11 +36,8 @@ class AuthenticationMiddleware:
         import httpx
         
         request = Request(scope, receive)
-
-        if request.url.path == "/health":
-            return await self.app(scope, receive, send)
         
-        if request.url.path == "/docs":
+        if request.url.path in ["/docs", "/openapi.json", "/health"]:
             return await self.app(scope, receive, send)
         
         # Extract the cookie
