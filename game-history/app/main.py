@@ -24,9 +24,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan,
               title=settings.PROJECT_NAME,
-              openapi_url="/history-service/openapi.json",
-              docs_url="/history-service/docs",
-              redoc_url="/history-service/redoc")
+              root_path="/history-service"
+              )
 
 logger = get_logger(__name__)
 
@@ -45,7 +44,7 @@ class AuthenticationMiddleware:
 
         request = Request(scope, receive)
 
-        if request.url.path in ["/history-service/docs", "/history-service/openapi.json", "/history-service/health"]:
+        if request.url.path in ["/docs", "/openapi.json", "/health"]:
             return await self.app(scope, receive, send)
 
         # Extract the cookie
@@ -93,7 +92,7 @@ async def get_current_user(request: Request):
     return request.state.user
 
 
-@app.get("/history-service/games", response_model=GamesDTO)
+@app.get("/games", response_model=GamesDTO)
 async def get_games_history(
         db: DBSessionDep,
         offset: int = 0,
@@ -113,7 +112,7 @@ async def get_games_history(
     return GamesDTO(games=game_dtos)
 
 
-@app.get("/history-service/health")
+@app.get("/health")
 async def health_check():
     return {"status": "ok"}
 

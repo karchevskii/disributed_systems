@@ -16,7 +16,7 @@ get_user_db_context = contextlib.asynccontextmanager(get_user_db)
 get_user_manager_context = contextlib.asynccontextmanager(get_user_manager)
 
 
-@router.get("/users-service/create-guest")
+@router.get("/create-guest")
 async def create_guest():
     try:
         # random email with uuid

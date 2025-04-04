@@ -13,9 +13,7 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 
 app = FastAPI(title=settings.PROJECT_NAME,
-              openapi_url="/game-service/openapi.json",
-              docs_url="/game-service/docs",
-              redoc_url="/game-service/redoc")
+              root_path="/game-service")
 
 
 redis = redis.Redis(
@@ -41,7 +39,7 @@ class AuthenticationMiddleware:
 
         request = Request(scope, receive)
 
-        if request.url.path in ["/game-service/docs", "/game-service/openapi.json", "/game-service/health"]:
+        if request.url.path in ["/docs", "/openapi.json", "/health"]:
             return await self.app(scope, receive, send)
 
         # Extract the cookie
@@ -164,7 +162,7 @@ def best_move(board):
     return move
 
 
-@app.websocket("/game-service/ws/game/{game_id}")
+@app.websocket("/ws/game/{game_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: str):
     # Authenticate user with token from query parameter
     import httpx
@@ -577,7 +575,7 @@ def check_winner(board):
     return None
 
 
-@app.get("/game-service/games/open", response_model=list[CreateGameDTO])
+@app.get("/games/open", response_model=list[CreateGameDTO])
 async def get_open_games(user=Depends(get_current_user)):
     # Get list of open game IDs
     open_game_ids = redis.smembers("open_games")
@@ -594,7 +592,7 @@ async def get_open_games(user=Depends(get_current_user)):
     return open_games
 
 
-@app.post("/game-service/game/create", response_model=CreateGameDTO)
+@app.post("/game/create", response_model=CreateGameDTO)
 async def create_game(data: CreateGameScheme, user=Depends(get_current_user)):
     # Generate a unique game ID
     game_id = str(uuid.uuid4())
@@ -643,7 +641,7 @@ async def create_game(data: CreateGameScheme, user=Depends(get_current_user)):
     return CreateGameDTO(**game_data)
 
 
-@app.post("/game-service/game/join/{game_id}")
+@app.post("/game/join/{game_id}")
 async def join_game(game_id: str, user=Depends(get_current_user)):
     # Get game from Redis
     game_data_str = redis.get(f"game:{game_id}")
@@ -681,7 +679,7 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     return game_data
 
 
-@app.get("/game-service/health")
+@app.get("/health")
 async def health_check():
     return {"status": "ok"}
 

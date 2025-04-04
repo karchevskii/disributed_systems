@@ -18,14 +18,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url="/users-service/openapi.json",
-    docs_url="/users-service/docs",
-    redoc_url="/users-service/redoc"
+    root_path="/users-service"
 )
 
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
-    prefix="/users-service/users",
+    prefix="/users",
     tags=["users"],
 )
 app.include_router(
@@ -35,21 +33,21 @@ app.include_router(
                                    redirect_url=settings.CALLBACK_URL,
                                    get_user_manager=fastapi_users.get_user_manager,
                                    is_verified_by_default=True),
-    prefix="/users-service/auth/github",
+    prefix="/auth/github",
     tags=["auth"],
 )
 app.include_router(router)
 
 
-@app.get("/users-service/auth/check-auth")
+@app.get("/auth/check-auth")
 async def check_auth(user: User = Depends(current_active_user)):
     return {"authenticated": True}
 
-@app.get("/users-service/authenticated-route")
+@app.get("/authenticated-route")
 async def authenticated_route(user: User = Depends(current_active_user)):
     return RedirectResponse(url=settings.FRONTEND_URL)
 
-@app.get("/users-service/auth/logout", tags=["auth"])
+@app.get("/auth/logout", tags=["auth"])
 async def logout():
     response = {"message": "Logged out"}
     # Create a response object with message
@@ -59,7 +57,7 @@ async def logout():
     response_obj.delete_cookie(key="tictactoe", path="/")
     return response_obj
 
-@app.get("/users-service/health")
+@app.get("/health")
 async def health_check():
     return {"status": "ok"}
 
