@@ -4,7 +4,7 @@ metadata:
   name: game
   namespace: tictactoe
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: game

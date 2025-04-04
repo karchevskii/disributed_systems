@@ -60,8 +60,19 @@ spec:
                   secretKeyRef:
                     name: game-history-postgres-service-creds
                     key: dbname
+              - name: REDIS_HOST
+                value: "redis"
+              - name: REDIS_PORT
+                value: "6379"
+              - name: REDIS_DB
+                value: "0"
+              - name: REDIS_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: redis-creds
+                    key: redis-password
               - name: USERS_SERVICE_URL
-                value: "http://users:8000"
+                value: "http://users:8000/users-service"
               - name: CORS_URL
                 value: "http://tictactoe.local"
           - name: wait-redis
