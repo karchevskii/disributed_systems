@@ -1,5 +1,7 @@
+import asyncio
 import datetime
 import json
+import threading
 from typing import Dict, Optional
 import uuid
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -91,14 +93,75 @@ class ConnectionManager:
     def __init__(self):
         # {game_id: {player_id: WebSocket}}
         self.active_connections: Dict[str, Dict[str, WebSocket]] = {}
+        
+        # Create Redis pub/sub for cross-instance communication
+        self.redis_pubsub = redis.Redis(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            password=settings.REDIS_PASSWORD,
+            decode_responses=True
+        ).pubsub()
+        
+        # Track our own instance ID to avoid broadcasting to ourselves
+        self.instance_id = str(uuid.uuid4())
+        
+        # Subscribe to the websocket broadcast channel
+        self.redis_pubsub.subscribe(**{'websocket_broadcasts': self._handle_pubsub_message})
+        
+        # Start listening thread
+        self._start_pubsub_listener()
+    
+    def _start_pubsub_listener(self):
+        """Start listening for pub/sub messages in a background thread"""
+        def listener():
+            # Create an event loop for the thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Process messages in the loop
+            self.redis_pubsub.run_in_thread(sleep_time=0.001, daemon=True)
+        
+        # Start the thread
+        thread = threading.Thread(target=listener, daemon=True)
+        thread.start()
+    
+    async def _handle_pubsub_message(self, message):
+        """Handle incoming pub/sub messages"""
+        if message['type'] != 'message':
+            return
+            
+        try:
+            data = json.loads(message['data'])
+            
+            # Skip messages from our own instance
+            if data.get('instance_id') == self.instance_id:
+                return
+                
+            game_id = data.get('game_id')
+            exclude_player = data.get('exclude_player')
+            payload = data.get('payload')
+            
+            # Forward the message to all local connections for this game
+            if game_id in self.active_connections:
+                for player_id, conn in self.active_connections[game_id].items():
+                    if player_id != exclude_player:
+                        try:
+                            await conn.send_json(payload)
+                        except Exception as e:
+                            logger.error(f"Error sending to player {player_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing pub/sub message: {e}")
 
     async def connect(self, websocket: WebSocket, game_id: str, player_id: str):
+        """Connect a player's websocket"""
         await websocket.accept()
         if game_id not in self.active_connections:
             self.active_connections[game_id] = {}
         self.active_connections[game_id][player_id] = websocket
 
     def disconnect(self, game_id: str, player_id: str):
+        """Disconnect a player"""
         if game_id in self.active_connections:
             if player_id in self.active_connections[game_id]:
                 del self.active_connections[game_id][player_id]
@@ -106,16 +169,31 @@ class ConnectionManager:
                 del self.active_connections[game_id]
 
     async def send_personal_message(self, message: dict, game_id: str, player_id: str):
+        """Send message to a specific player"""
         if game_id in self.active_connections and player_id in self.active_connections[game_id]:
             await self.active_connections[game_id][player_id].send_json(message)
 
     async def broadcast(self, message: dict, game_id: str, exclude: Optional[str] = None):
+        """Broadcast a message to all players in a game across all instances"""
+        # First, send to all local connections
         if game_id in self.active_connections:
             for player_id, connection in self.active_connections[game_id].items():
                 if player_id != exclude:
                     await connection.send_json(message)
+        
+        # Then, publish to Redis for other instances
+        redis_message = {
+            'instance_id': self.instance_id,
+            'game_id': game_id,
+            'exclude_player': exclude,
+            'payload': message
+        }
+        
+        # Use a separate Redis client for publishing
+        redis.publish('websocket_broadcasts', json.dumps(redis_message))
 
 
+# Initialize the manager
 manager = ConnectionManager()
 
 
