@@ -5,7 +5,7 @@ class GameService {
       this.apiBaseUrl = 'http://tictactoe.local/users-service';
       this.gameApiUrl = 'http://tictactoe.local/game-service';
       this.gameHistoryApiUrl = 'http://tictactoe.local/game-history';
-      this.wsHost = 'localhost:8001';
+      this.wsHost = 'tictactoe.local/game-service';
     } else {
       // For production/Docker environment
       this.apiBaseUrl = 'http://auth-service:8000';
