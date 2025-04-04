@@ -80,14 +80,15 @@
       </v-card-actions>
     </v-card>
 
-    <!-- Game Details Dialog -->
+    <!-- Game Details Dialog with Replay Feature -->
     <v-dialog v-model="showGameDetailsDialog" max-width="600">
       <v-card v-if="selectedGame">
         <v-card-title class="text-h5">
-          Game Details
+          Game Replay
         </v-card-title>
 
         <v-card-text>
+          <!-- Game Information -->
           <v-row>
             <v-col cols="12" sm="6">
               <v-list-item>
@@ -111,64 +112,99 @@
                 </v-list-item-content>
               </v-list-item>
             </v-col>
-            <v-col cols="12" sm="6">
-              <v-list-item>
-                <v-list-item-content>
-                  <v-list-item-title>Date</v-list-item-title>
-                  <v-list-item-subtitle>{{ formatDate(selectedGame.created_at) }}</v-list-item-subtitle>
-                </v-list-item-content>
-              </v-list-item>
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-list-item>
-                <v-list-item-content>
-                  <v-list-item-title>Game ID</v-list-item-title>
-                  <v-list-item-subtitle>{{ selectedGame.game_id }}</v-list-item-subtitle>
-                </v-list-item-content>
-              </v-list-item>
-            </v-col>
           </v-row>
 
-          <v-divider class="my-4"></v-divider>
+          <!-- Show Your Symbol -->
+          <div class="d-flex justify-center align-center my-3">
+            <v-chip 
+              :color="playerSymbolInGame === 'x' ? 'red' : 'blue'" 
+              dark
+              class="font-weight-bold"
+            >
+              You played as {{ playerSymbolInGame.toUpperCase() }}
+            </v-chip>
+          </div>
 
-          <h3 class="text-subtitle-1 mb-2">Final Board</h3>
-          <div class="game-board-preview">
+          <!-- Current Move Display -->
+          <div class="text-center mb-3">
+            <h3 class="text-subtitle-1">
+              {{ currentMoveIndex === -1 ? 'Starting Board' : 
+                 currentMoveIndex === replayMoves.length ? 'Final Position' : 
+                 `Move ${currentMoveIndex + 1} of ${replayMoves.length}` }}
+            </h3>
+          </div>
+
+          <!-- Game Board for Replay -->
+          <div class="game-board-replay">
             <div class="game-board-row" v-for="(_, rowIndex) in 3" :key="'row-' + rowIndex">
               <div
                 class="game-board-cell"
                 v-for="(_, colIndex) in 3"
                 :key="'cell-' + rowIndex + '-' + colIndex"
               >
-                <span v-if="getBoardCell(rowIndex, colIndex) === 'x'" class="x-mark">X</span>
-                <span v-else-if="getBoardCell(rowIndex, colIndex) === 'o'" class="o-mark">O</span>
+                <span v-if="getReplayBoardCell(rowIndex, colIndex) === 'x'" class="x-mark">X</span>
+                <span v-else-if="getReplayBoardCell(rowIndex, colIndex) === 'o'" class="o-mark">O</span>
               </div>
             </div>
           </div>
 
-          <v-divider class="my-4"></v-divider>
-
-          <h3 class="text-subtitle-1 mb-2">Game Moves</h3>
-          <v-timeline dense>
-            <v-timeline-item
-              v-for="(move, index) in selectedGame.moves"
-              :key="index"
-              :color="move.symbol === 'x' ? 'red' : 'blue'"
-              small
+          <!-- Replay Controls -->
+          <div class="d-flex justify-center align-center mt-4">
+            <v-btn icon color="primary" @click="moveToStart" :disabled="currentMoveIndex === -1">
+              <v-icon>mdi-skip-backward</v-icon>
+            </v-btn>
+            
+            <v-btn icon color="primary" @click="movePrevious" :disabled="currentMoveIndex === -1">
+              <v-icon>mdi-step-backward</v-icon>
+            </v-btn>
+            
+            <v-btn 
+              icon 
+              :color="isPlaying ? 'error' : 'success'" 
+              @click="togglePlayback"
+              :disabled="currentMoveIndex === replayMoves.length"
             >
-              <div>
-                <strong>{{ getPlayerName(move.player) }}</strong> placed 
-                <span :class="move.symbol === 'x' ? 'x-mark' : 'o-mark'">
-                  {{ move.symbol.toUpperCase() }}
-                </span> 
-                at position ({{ Math.floor(move.position / 3) }}, {{ move.position % 3 }})
-              </div>
-            </v-timeline-item>
-          </v-timeline>
+              <v-icon>{{ isPlaying ? 'mdi-pause' : 'mdi-play' }}</v-icon>
+            </v-btn>
+            
+            <v-btn icon color="primary" @click="moveNext" :disabled="currentMoveIndex === replayMoves.length">
+              <v-icon>mdi-step-forward</v-icon>
+            </v-btn>
+            
+            <v-btn icon color="primary" @click="moveToEnd" :disabled="currentMoveIndex === replayMoves.length">
+              <v-icon>mdi-skip-forward</v-icon>
+            </v-btn>
+          </div>
+
+          <!-- Move Speed Control -->
+          <div class="d-flex align-center mt-2 px-4">
+            <span class="pr-2">Speed:</span>
+            <v-slider
+              v-model="playbackSpeed"
+              min="1"
+              max="10"
+              thumb-label
+              dense
+              hide-details
+            ></v-slider>
+          </div>
+
+          <!-- Current Move Info -->
+          <v-card v-if="currentMoveIndex >= 0 && currentMoveIndex < replayMoves.length" outlined class="mt-4">
+            <v-card-text>
+              <strong>{{ getPlayerName(replayMoves[currentMoveIndex].player) }}</strong> placed 
+              <span :class="replayMoves[currentMoveIndex].symbol === 'x' ? 'x-mark' : 'o-mark'">
+                {{ replayMoves[currentMoveIndex].symbol.toUpperCase() }}
+              </span> 
+              at position ({{ Math.floor(replayMoves[currentMoveIndex].position / 3) }}, 
+              {{ replayMoves[currentMoveIndex].position % 3 }})
+            </v-card-text>
+          </v-card>
         </v-card-text>
 
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="primary" text @click="showGameDetailsDialog = false">Close</v-btn>
+          <v-btn color="primary" text @click="closeGameDetails">Close</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -200,6 +236,13 @@ export default {
       error: '',
       showGameDetailsDialog: false,
       selectedGame: null,
+      currentMoveIndex: -1,
+      replayBoard: Array(9).fill(''),
+      replayMoves: [],
+      playbackInterval: null,
+      isPlaying: false,
+      playbackSpeed: 5,
+      playerSymbolInGame: 'x',
       headers: [
         { text: 'Type', value: 'game_type' },
         { text: 'Result', value: 'winner' },
@@ -217,6 +260,10 @@ export default {
       set(value) {
         this.$emit('update:showGameHistoryDialog', value);
       }
+    },
+    playbackDelay() {
+      // Convert speed (1-10) to milliseconds (2000ms to 200ms)
+      return 2200 - (this.playbackSpeed * 200);
     }
   },
   
@@ -273,7 +320,7 @@ export default {
         this.loading = false;
       }
     },
-
+    
     formatDate(dateString) {
       const date = new Date(dateString);
       return new Intl.DateTimeFormat('en-US', {
@@ -284,18 +331,124 @@ export default {
         minute: '2-digit'
       }).format(date);
     },
-
+    
     viewGameDetails(game) {
       this.selectedGame = game;
       this.showGameDetailsDialog = true;
+      
+      // Determine which symbol the player used in this game
+      if (game.player_x_id === this.userId) {
+        this.playerSymbolInGame = 'x';
+      } else {
+        this.playerSymbolInGame = 'o';
+      }
+      
+      // Initialize replay
+      this.initializeReplay();
     },
-
-    getBoardCell(row, col) {
-      if (!this.selectedGame || !this.selectedGame.board) return '';
+    
+    initializeReplay() {
+      // Reset current state
+      this.stopPlayback();
+      this.currentMoveIndex = -1;
+      this.replayBoard = Array(9).fill('');
+      
+      // Make a copy of the moves to manipulate
+      if (this.selectedGame && Array.isArray(this.selectedGame.moves)) {
+        // Sort moves by timestamp if available
+        this.replayMoves = [...this.selectedGame.moves].sort((a, b) => {
+          if (a.timestamp && b.timestamp) {
+            return new Date(a.timestamp) - new Date(b.timestamp);
+          }
+          return 0;
+        });
+      } else {
+        this.replayMoves = [];
+      }
+    },
+    
+    // Get the value at a specific cell in the replay board
+    getReplayBoardCell(row, col) {
       const index = row * 3 + col;
-      return this.selectedGame.board[index] || '';
+      return this.replayBoard[index] || '';
     },
-
+    
+    // Play/Pause functionality
+    togglePlayback() {
+      if (this.isPlaying) {
+        this.stopPlayback();
+      } else {
+        this.startPlayback();
+      }
+    },
+    
+    startPlayback() {
+      if (this.currentMoveIndex < this.replayMoves.length) {
+        this.isPlaying = true;
+        this.playbackInterval = setInterval(() => {
+          this.moveNext();
+          
+          // Stop at the end
+          if (this.currentMoveIndex >= this.replayMoves.length) {
+            this.stopPlayback();
+          }
+        }, this.playbackDelay);
+      }
+    },
+    
+    stopPlayback() {
+      if (this.playbackInterval) {
+        clearInterval(this.playbackInterval);
+        this.playbackInterval = null;
+      }
+      this.isPlaying = false;
+    },
+    
+    // Navigation controls
+    moveToStart() {
+      this.stopPlayback();
+      this.currentMoveIndex = -1;
+      this.replayBoard = Array(9).fill('');
+    },
+    
+    movePrevious() {
+      if (this.currentMoveIndex > -1) {
+        this.currentMoveIndex--;
+        this.updateReplayBoard();
+      }
+    },
+    
+    moveNext() {
+      if (this.currentMoveIndex < this.replayMoves.length - 1) {
+        this.currentMoveIndex++;
+        
+        // Apply the move
+        const move = this.replayMoves[this.currentMoveIndex];
+        this.replayBoard[move.position] = move.symbol;
+      } else if (this.currentMoveIndex === this.replayMoves.length - 1) {
+        // Increment to final state without making changes
+        this.currentMoveIndex++;
+      }
+    },
+    
+    moveToEnd() {
+      this.stopPlayback();
+      this.replayBoard = [...this.selectedGame.board];
+      this.currentMoveIndex = this.replayMoves.length;
+    },
+    
+    // Rebuild the board up to the current move
+    updateReplayBoard() {
+      // Start with an empty board
+      this.replayBoard = Array(9).fill('');
+      
+      // Apply all moves up to the current index
+      for (let i = 0; i <= this.currentMoveIndex; i++) {
+        const move = this.replayMoves[i];
+        this.replayBoard[move.position] = move.symbol;
+      }
+    },
+    
     getPlayerName(playerId) {
       if (!this.selectedGame) return 'Unknown';
       
@@ -306,6 +459,12 @@ export default {
       } else {
         return 'Opponent';
       }
+    },
+    
+    closeGameDetails() {
+      this.stopPlayback();
+      this.showGameDetailsDialog = false;
+      this.selectedGame = null;
     }
   },
   
@@ -314,7 +473,26 @@ export default {
       if (newVal === true) {
         this.refreshGameHistory();
       }
+    },
+    
+    playbackSpeed() {
+      // Restart playback with new speed if currently playing
+      if (this.isPlaying) {
+        this.stopPlayback();
+        this.startPlayback();
+      }
+    },
+    
+    showGameDetailsDialog(newVal) {
+      if (!newVal) {
+        this.stopPlayback();
+      }
     }
+  },
+  
+  // Clean up any intervals when component is destroyed
+  beforeDestroy() {
+    this.stopPlayback();
   }
 }
 </script>
@@ -327,26 +505,35 @@ export default {
   max-width: 180px;
 }
 
+.game-board-replay {
+  display: flex;
+  flex-direction: column;
+  margin: 0 auto;
+  max-width: 240px;
+}
+
 .game-board-row {
   display: flex;
 }
 
 .game-board-cell {
-  width: 60px;
-  height: 60px;
+  width: 80px;
+  height: 80px;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 1.5rem;
+  font-size: 2rem;
   font-weight: bold;
   border: 2px solid #ccc;
 }
 
 .x-mark {
   color: #f44336; /* Red */
+  font-weight: bold;
 }
 
 .o-mark {
   color: #2196f3; /* Blue */
+  font-weight: bold;
 }
 </style>
