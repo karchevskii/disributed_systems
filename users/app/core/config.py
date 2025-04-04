@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     ON_SUCCESS_REDIRECT_URL: str = "http://localhost:8000/authenticated-route"
 
     FRONTEND_URL: str
+    CORS_URL: str
     COOKIE_DOMAIN: str
     
     # Logging

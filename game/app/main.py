@@ -685,7 +685,7 @@ async def health_check():
 
 
 allowed_origins = [
-    settings.FRONTEND_URL,
+    settings.CORS_URL,
 ]
 
 app.add_middleware(

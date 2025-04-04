@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
 
     USERS_SERVICE_URL: str
-    FRONTEND_URL: str
+    CORS_URL: str
     
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379

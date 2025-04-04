@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["local", "staging", "production", "test"] = "local"
 
     USERS_SERVICE_URL: str
-    FRONTEND_URL: str
+    CORS_URL: str
 
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
