@@ -8,10 +8,10 @@ class GameService {
       this.wsHost = 'tictactoe.local/game-service';
     } else {
       // For production/Docker environment
-      this.apiBaseUrl = 'http://auth-service:8000';
-      this.gameApiUrl = 'http://game-service:8001';
-      this.gameHistoryApiUrl = 'http://history-service:8000';
-      this.wsHost = 'game-service:8001';
+      this.apiBaseUrl = 'http://tictactoe.local/users-service';
+      this.gameApiUrl = 'http://tictactoe.local/game-service';
+      this.gameHistoryApiUrl = 'http://tictactoe.local/game-history';
+      this.wsHost = 'tictactoe.local/game-service';
     }
     
     this.onSocketMessage = onSocketMessage;
