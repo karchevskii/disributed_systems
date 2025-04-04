@@ -5,19 +5,31 @@ import json
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.crud import create_game_history
-from app.db import get_db_session
+from app.db import DatabaseSessionManager
+
 
 logger = get_logger(__name__)
 
-redis_client = redis.Redis(
-    host=settings.REDIS_HOST,
-    port=settings.REDIS_PORT,
-    db=settings.REDIS_DB,
-    password=settings.REDIS_PASSWORD,
-    decode_responses=True
-)
+def get_redis_client():
+    return redis.Redis(
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        db=settings.REDIS_DB,
+        password=settings.REDIS_PASSWORD,
+        decode_responses=True
+    )
+
+_consumer_sessionmanager = None
+
+
 
 async def process_redis_messages():
+    global _consumer_sessionmanager
+
+    _consumer_sessionmanager = DatabaseSessionManager(str(settings.DATABASE_URI))
+
+    redis_client = get_redis_client()
+
     try:
         redis_client.xgroup_create("completed_games", "game_history", id="0", mkstream=True)
         logger.info("Consumer Group created")
@@ -46,7 +58,7 @@ async def process_redis_messages():
                                 game_data = json.loads(msg_data["data"])
                                 logger.info(f"Parsed game data: {game_data}")
                                 
-                                async for db_session in get_db_session():
+                                async with _consumer_sessionmanager.session() as db_session:
                                     # Now we have a real session, not just a dependency annotation
                                     try:
                                         await create_game_history(db_session=db_session, game_data=game_data)
