@@ -36,6 +36,6 @@ async def create_guest():
                     strategy = auth_backend.get_strategy()
                     response = await auth_backend.login(strategy, user)
 
-        return {"message": "created"}
+        return response
     except Exception as e:
         raise
