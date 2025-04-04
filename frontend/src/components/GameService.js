@@ -4,13 +4,15 @@ class GameService {
     if (window.location.hostname === 'localhost') {
       this.apiBaseUrl = 'http://tictactoe.local/users-service';
       this.gameApiUrl = 'http://tictactoe.local/game-service';
-      this.gameHistoryApiUrl = 'http://tictactoe.local/game-history';
+      // Updated URL path to match your backend's actual endpoint
+      this.gameHistoryApiUrl = 'http://tictactoe.local/history-service';
       this.wsHost = 'tictactoe.local/game-service';
     } else {
       // For production/Docker environment
       this.apiBaseUrl = 'http://tictactoe.local/users-service';
       this.gameApiUrl = 'http://tictactoe.local/game-service';
-      this.gameHistoryApiUrl = 'http://tictactoe.local/game-history';
+      // Updated URL path to match your backend's actual endpoint
+      this.gameHistoryApiUrl = 'http://tictactoe.local/history-service';
       this.wsHost = 'tictactoe.local/game-service';
     }
     
