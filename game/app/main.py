@@ -109,18 +109,64 @@ class ConnectionManager:
         # Subscribe to the websocket broadcast channel
         self.redis_pubsub.subscribe('websocket_broadcasts')
         
-        # Start async task to poll for messages
-        asyncio.create_task(self._poll_for_messages())
+        # Flag to indicate if polling task is running
+        self.polling_task = None
+        
+    async def connect(self, websocket: WebSocket, game_id: str, player_id: str):
+        """Connect a player's websocket"""
+        await websocket.accept()
+        if game_id not in self.active_connections:
+            self.active_connections[game_id] = {}
+        self.active_connections[game_id][player_id] = websocket
+        
+        # Ensure polling is started when first connection happens
+        if self.polling_task is None or self.polling_task.done():
+            self.start_polling()
+
+    def start_polling(self):
+        """Start the polling task if it's not already running"""
+        try:
+            # Only start if there's a running event loop
+            loop = asyncio.get_running_loop()
+            self.polling_task = loop.create_task(self._poll_for_messages())
+        except RuntimeError:
+            # No running event loop - this is fine, we'll start when needed
+            logger.info("No event loop running, will start polling when connections are made")
     
     async def _poll_for_messages(self):
         """Poll for messages from Redis in an async way"""
-        while True:
-            message = self.redis_pubsub.get_message(timeout=0.01)
-            if message and message['type'] == 'message':
-                await self._handle_pubsub_message(message)
-            
-            # Don't hog the event loop
-            await asyncio.sleep(0.01)
+        logger.info(f"Starting Redis pubsub polling for instance {self.instance_id}")
+        try:
+            while True:
+                try:
+                    message = self.redis_pubsub.get_message(timeout=0.01)
+                    if message and message['type'] == 'message':
+                        await self._handle_pubsub_message(message)
+                except Exception as e:
+                    logger.error(f"Error in polling loop: {e}")
+                
+                # Don't hog the event loop
+                await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            logger.info("Polling task cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Polling task encountered an error: {e}")
+            # Re-raise to let the task fail and potentially be restarted
+            raise
+    
+    def disconnect(self, game_id: str, player_id: str):
+        """Disconnect a player"""
+        if game_id in self.active_connections:
+            if player_id in self.active_connections[game_id]:
+                del self.active_connections[game_id][player_id]
+            if not self.active_connections[game_id]:  # If empty
+                del self.active_connections[game_id]
+        
+        # Stop polling if no more connections
+        if not self.active_connections and self.polling_task:
+            self.polling_task.cancel()
+            self.polling_task = None
     
     async def _handle_pubsub_message(self, message):
         """Handle incoming pub/sub messages"""
@@ -145,6 +191,36 @@ class ConnectionManager:
                             logger.error(f"Error sending to player {player_id}: {e}")
         except Exception as e:
             logger.error(f"Error processing pub/sub message: {e}")
+
+    async def send_personal_message(self, message: dict, game_id: str, player_id: str):
+        """Send message to a specific player"""
+        if game_id in self.active_connections and player_id in self.active_connections[game_id]:
+            await self.active_connections[game_id][player_id].send_json(message)
+
+    async def broadcast(self, message: dict, game_id: str, exclude: Optional[str] = None):
+        """Broadcast a message to all players in a game across all instances"""
+        # First, send to all local connections
+        if game_id in self.active_connections:
+            for player_id, connection in self.active_connections[game_id].items():
+                if player_id != exclude:
+                    try:
+                        await connection.send_json(message)
+                    except Exception as e:
+                        logger.error(f"Error broadcasting to player {player_id}: {e}")
+        
+        # Then, publish to Redis for other instances
+        redis_message = {
+            'instance_id': self.instance_id,
+            'game_id': game_id,
+            'exclude_player': exclude,
+            'payload': message
+        }
+        
+        # Use the global redis client for publishing
+        try:
+            redis_client.publish('websocket_broadcasts', json.dumps(redis_message))
+        except Exception as e:
+            logger.error(f"Error publishing broadcast to Redis: {e}")
 
 # Initialize the manager
 manager = ConnectionManager()
