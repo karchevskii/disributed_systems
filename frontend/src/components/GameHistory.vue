@@ -273,17 +273,46 @@ export default {
       this.error = '';
       
       try {
-        // Use the parent component's gameService to get data
-        // If this doesn't work, we'll need to adjust how we access the gameService
-        if (this.$parent && this.$parent.gameService) {
-          const data = await this.$parent.gameService.getGameHistory();
+        // Direct fetch using the API URL from props
+        const response = await fetch(`${this.gameHistoryApiUrl}/games`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        // If API returns an error response, check if it's 404 (no games yet)
+        if (!response.ok) {
+          if (response.status === 404) {
+            // No games yet, not an error
+            this.games = [];
+          } else {
+            console.error(`Game history API error: ${response.status}`);
+            this.error = `Failed to fetch game history: ${response.statusText}`;
+          }
+          return;
+        }
+        
+        // Get the raw text
+        const responseText = await response.text();
+        
+        // If response is empty
+        if (!responseText.trim()) {
+          this.games = [];
+          return;
+        }
+        
+        // Try to parse the JSON
+        try {
+          const data = JSON.parse(responseText);
           
-          if (!data || !data.games) {
+          if (!data || !data.games || !Array.isArray(data.games)) {
+            console.error("Invalid data format:", data);
             this.games = [];
             return;
           }
           
-          // Process the games to ensure the data structure is correct
+          console.log("Game history data:", data.games);
+          
+          // Process the games
           this.games = data.games.map(game => {
             // Ensure the board is always an array of 9 items
             if (!Array.isArray(game.board) || game.board.length !== 9) {
@@ -297,57 +326,15 @@ export default {
             
             return game;
           });
-        } else {
-          // Direct fetch if gameService is not available
-          const response = await fetch(`${this.gameHistoryApiUrl}/games`, {
-            method: 'GET',
-            credentials: 'include'
-          });
-          
-          // If we get a 404 or any error, just show empty state
-          if (!response.ok) {
-            this.games = [];
-            return;
-          }
-          
-          const responseText = await response.text();
-          
-          // If response is empty, return empty array
-          if (!responseText.trim()) {
-            this.games = [];
-            return;
-          }
-          
-          try {
-            const data = JSON.parse(responseText);
-            
-            if (!data || !data.games || !Array.isArray(data.games)) {
-              this.games = [];
-              return;
-            }
-            
-            // Process the games
-            this.games = data.games.map(game => {
-              // Ensure the board is always an array of 9 items
-              if (!Array.isArray(game.board) || game.board.length !== 9) {
-                game.board = Array(9).fill('');
-              }
-              
-              // Normalize the moves array
-              if (!Array.isArray(game.moves)) {
-                game.moves = [];
-              }
-              
-              return game;
-            });
-          } catch (parseError) {
-            console.error('Error parsing JSON:', parseError);
-            this.games = [];
-          }
+        } catch (parseError) {
+          console.error('Error parsing JSON:', parseError);
+          console.log('Raw response:', responseText);
+          this.error = 'Error parsing game history data';
+          this.games = [];
         }
       } catch (error) {
         console.error('Error fetching game history:', error);
-        // Don't set error message - just show empty games
+        this.error = error.message || 'Failed to fetch game history';
         this.games = [];
       } finally {
         this.loading = false;
