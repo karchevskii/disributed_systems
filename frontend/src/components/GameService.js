@@ -1,10 +1,18 @@
 class GameService {
   constructor(apiBaseUrl, gameApiUrl, onSocketMessage, onError) {
-    // Use environment variables with fallbacks
-    this.apiBaseUrl = process.env.VUE_APP_USERS_SERVICE_URL || apiBaseUrl || 'http://tictactoe.local/users-service';
-    this.gameApiUrl = process.env.VUE_APP_GAME_SERVICE_URL || gameApiUrl || 'http://tictactoe.local/game-service';
-    this.gameHistoryApiUrl = process.env.VUE_APP_HISTORY_SERVICE_URL || 'http://tictactoe.local/history-service';
-    this.wsHost = process.env.VUE_APP_WS_HOST || 'tictactoe.local/game-service';
+    // For development outside Docker
+    if (window.location.hostname === 'localhost') {
+      this.apiBaseUrl = 'http://tictactoe.local/users-service';
+      this.gameApiUrl = 'http://tictactoe.local/game-service';
+      this.gameHistoryApiUrl = 'http://tictactoe.local/history-service';
+      this.wsHost = 'tictactoe.local/game-service';
+    } else {
+      // For production/Docker environment
+      this.apiBaseUrl = 'http://tictactoe.local/users-service';
+      this.gameApiUrl = 'http://tictactoe.local/game-service';
+      this.gameHistoryApiUrl = 'http://tictactoe.local/history-service';
+      this.wsHost = 'tictactoe.local/game-service';
+    }
     
     this.onSocketMessage = onSocketMessage;
     this.onError = onError;
