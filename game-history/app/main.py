@@ -106,7 +106,17 @@ async def get_games_history(
         raise HTTPException(status_code=404, detail="No games found")
 
     # Convert SQLAlchemy models to Pydantic models
-    game_dtos = [GameDTO.model_validate(game) for game in games]
+    game_dtos = []
+
+    for game in games:
+        game_dto = GameDTO.model_validate(game)
+
+        if game.winner == "draw":
+            game_dto.result = "draw"
+        elif game.winner == user["id"]:
+            game_dto.result = "win"
+        else:
+            game_dto.result = "loss"
 
     # Return wrapped in GamesDTO
     return GamesDTO(games=game_dtos)

@@ -15,6 +15,7 @@ class GameDTO(BaseModel):
     game_id: UUID | str
     created_at: datetime.datetime
     created_by: str
+    result: str
 
     class Config:
         from_attributes = True
