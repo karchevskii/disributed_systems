@@ -136,10 +136,37 @@
                   </v-btn>
                 </div>
                 
-                <!-- Game/Turn Status (shows whos turn it's right now) -->
-                <v-card-subtitle class="text-center text-h6 mb-2">
-                  {{ gameStatus }}
+                <!-- Game/Turn Status with improved styling -->
+                <v-card-subtitle class="text-center text-h6 mb-2 d-flex align-center justify-center">
+                  <span>{{ gameStatus }}</span>
+                  
+                  <!-- Add reconnect button when opponent disconnected -->
+                  <v-btn 
+                    v-if="opponentDisconnected && !gameOver"
+                    text
+                    small
+                    color="primary"
+                    class="ml-2"
+                    @click="attemptReconnect"
+                  >
+                    <v-icon small left>mdi-refresh</v-icon>
+                    Reconnect
+                  </v-btn>
                 </v-card-subtitle>
+                
+                <!-- Add connection status indicator -->
+                <div v-if="inGame && gameMode === 'human'" class="text-center mb-3">
+                  <v-chip
+                    x-small
+                    :color="gameService && gameService.socket && gameService.socket.readyState === 1 ? 'success' : 'error'"
+                    outlined
+                  >
+                    <v-icon left x-small>
+                      {{ gameService && gameService.socket && gameService.socket.readyState === 1 ? 'mdi-access-point' : 'mdi-access-point-off' }}
+                    </v-icon>
+                    {{ gameService && gameService.socket && gameService.socket.readyState === 1 ? 'Connected' : 'Disconnected' }}
+                  </v-chip>
+                </div>
                 
                 <!-- Game Board -->
                 <game-board 
@@ -167,11 +194,25 @@
                     Back to Menu
                   </v-btn>
                   
-                  <!-- Only show "Leave Game" when game is in progress -->
-                  <v-btn v-if="!gameOver" color="error" @click="leaveGame">
-                    <v-icon left>mdi-exit-to-app</v-icon>
-                    Leave Game
-                  </v-btn>
+                  <!-- In-progress game controls -->
+                  <template v-if="!gameOver">
+                    <!-- Reconnect button for disconnected state -->
+                    <v-btn 
+                      v-if="gameService && (!gameService.socket || gameService.socket.readyState !== 1)"
+                      color="primary" 
+                      class="mr-2"
+                      @click="attemptReconnect"
+                    >
+                      <v-icon left>mdi-refresh</v-icon>
+                      Reconnect
+                    </v-btn>
+                    
+                    <!-- Leave Game button -->
+                    <v-btn color="error" @click="leaveGame">
+                      <v-icon left>mdi-exit-to-app</v-icon>
+                      {{ gameMode === 'human' ? 'Forfeit Game' : 'Leave Game' }}
+                    </v-btn>
+                  </template>
                 </div>
               </div>
             </v-card>
@@ -251,6 +292,12 @@ export default {
     
     // Check if the URL contains a game code (for direct joining)
     this.checkUrlForGameCode();
+    
+    // Set up window event handlers for reconnection
+    this.setupWindowEvents();
+    
+    // Add beforeUnload handler for page exit warning
+    window.addEventListener('beforeunload', this.handleBeforeUnload);
   },
   
   data() {
@@ -276,6 +323,8 @@ export default {
       winner: null,
       gameOver: false,
       movesCount: 0,
+      gameStatusText: null,  // Custom status text for disconnections
+      opponentDisconnected: false,  // Track if opponent has disconnected
       
       // UI controls
       showGameModeDialog: false,
@@ -307,6 +356,11 @@ export default {
   
   computed: {
     gameStatus() {
+      // If we have custom status text, use that
+      if (this.gameStatusText) {
+        return this.gameStatusText;
+      }
+      
       if (this.gameOver) {
         if (this.winner) {
           return this.winner === this.playerSymbol ? 'You won!' : 'You lost!';
@@ -314,6 +368,9 @@ export default {
           return 'It\'s a draw!';
         }
       } else {
+        if (this.opponentDisconnected) {
+          return `Opponent disconnected. Waiting for reconnection...`;
+        }
         return this.currentPlayer === this.playerSymbol ? 'Your turn' : 'Opponent\'s turn';
       }
     },
@@ -629,17 +686,35 @@ export default {
           } else if (gameData.winner) {
             this.winner = gameData.winner.toUpperCase();
           }
+          
+          // Handle player disconnection notifications
+          if (data.disconnection) {
+            this.showNotification(data.message || "Your opponent disconnected", "success");
+            
+            // Add a system message to the chat
+            if (this.$refs.gameChat) {
+              this.$refs.gameChat.addMessage({
+                sender: 'bot',
+                message: data.message || "Your opponent disconnected from the game."
+              });
+            }
+          }
         }
         
         // Update current player
         if (gameData.current_player === this.userId) {
           this.currentPlayer = this.playerSymbol;
+        } else if (gameData.current_player === 'bot') {
+          this.currentPlayer = this.playerSymbol === 'X' ? 'O' : 'X';
         } else {
           this.currentPlayer = this.playerSymbol === 'X' ? 'O' : 'X';
         }
         
         // Update move count
         this.movesCount = gameData.board.filter(cell => cell !== '').length;
+        
+        // Update game status display
+        this.updateGameStatusDisplay(gameData);
       } else if (data.type === 'chat') {
         // Handle chat messages
         if (this.$refs.gameChat) {
@@ -653,18 +728,96 @@ export default {
         const disconnectedSymbol = data.player.toUpperCase();
         if (disconnectedSymbol !== this.playerSymbol) {
           // Only show notification if it's the opponent who disconnected
-          this.showNotification(`Your opponent (${disconnectedSymbol}) has disconnected from the game.`, 'warning');
+          this.showNotification(
+            `Your opponent (${disconnectedSymbol}) has disconnected from the game. If they don't reconnect within 30 seconds, you'll win automatically.`, 
+            "warning"
+          );
+          
+          // Update UI to show disconnected state
+          this.opponentDisconnected = true;
+          
+          // Add system message to chat
+          if (this.$refs.gameChat) {
+            this.$refs.gameChat.addMessage({
+              sender: 'bot',
+              message: `Player ${disconnectedSymbol} has disconnected. Waiting 30 seconds for reconnection...`
+            });
+          }
         }
       } else if (data.type === 'player_connected') {
         // Handle player reconnection
         const connectedSymbol = data.player.toUpperCase();
         if (connectedSymbol !== this.playerSymbol) {
           // Only show notification if it's the opponent who reconnected
-          this.showNotification(`Your opponent (${connectedSymbol}) has joined the game.`, 'success');
+          this.showNotification(`Your opponent (${connectedSymbol}) has rejoined the game.`, 'success');
+          
+          // Update UI to show connected state
+          this.opponentDisconnected = false;
+          
+          // Add system message to chat
+          if (this.$refs.gameChat) {
+            this.$refs.gameChat.addMessage({
+              sender: 'bot',
+              message: `Player ${connectedSymbol} has reconnected to the game.`
+            });
+          }
+        }
+      } else if (data.type === 'connection_status') {
+        if (data.status === 'disconnected') {
+          if (this.inGame && !this.gameOver) {
+            this.showNotification('Disconnected from game server. Trying to reconnect...', 'warning');
+            
+            // Add system message to chat
+            if (this.$refs.gameChat) {
+              this.$refs.gameChat.addMessage({
+                sender: 'bot',
+                message: 'You have been disconnected from the game. Attempting to reconnect...'
+              });
+            }
+            
+            // Attempt to automatically reconnect
+            setTimeout(() => {
+              if (this.inGame && this.gameCode && (!this.gameService.socket || this.gameService.socket.readyState !== WebSocket.OPEN)) {
+                this.attemptReconnect();
+              }
+            }, 2000); // Wait 2 seconds before trying to reconnect
+          }
+        } else if (data.status === 'connected') {
+          if (this.inGame) {
+            this.showNotification('Connected to game server', 'success');
+            
+            // Add system message to chat
+            if (this.$refs.gameChat) {
+              this.$refs.gameChat.addMessage({
+                sender: 'bot',
+                message: 'Connection to game server established.'
+              });
+            }
+          }
         }
       } else if (data.type === 'error') {
         this.showNotification(data.message, 'error');
       }
+    },
+    
+    // Updated game status display based on backend data
+    updateGameStatusDisplay(gameData) {
+      // Check if there was a timeout or disconnection
+      if (gameData.status === 'completed' && gameData.moves && gameData.moves.length > 0) {
+        const lastMove = gameData.moves[gameData.moves.length - 1];
+        
+        if (lastMove.action === 'disconnect' || lastMove.action === 'disconnect_timeout') {
+          if (this.winner === this.playerSymbol) {
+            this.gameStatusText = 'You won! (Opponent disconnected)';
+          } else {
+            this.gameStatusText = 'You lost! (Disconnected from game)';
+          }
+          return;
+        }
+      }
+      
+      // Default status text (use computed property)
+      this.gameStatusText = null;
     },
     
     // Make Move method
@@ -696,9 +849,36 @@ export default {
       this.gameCode = gameId;
       this.playerSymbol = playerSymbol;
       this.gameMode = gameMode;
+      this.opponentDisconnected = false;
+      this.gameStatusText = null;
       
       // Connect to WebSocket
       this.gameService.connectToGameSocket(gameId);
+      
+      // Add a welcome message to to the chat
+      if (this.$refs.gameChat) {
+        const welcomeMessage = gameMode === 'bot' 
+          ? 'Playing against AI bot. Have fun!' 
+          : 'Connected to multiplayer game. Good luck!';
+        
+        this.$refs.gameChat.addMessage({
+          sender: 'bot',
+          message: welcomeMessage
+        });
+        
+        // Add symbol info to chat
+        this.$refs.gameChat.addMessage({
+          sender: 'bot',
+          message: `You are playing as ${playerSymbol}. ${playerSymbol === 'X' ? 'X goes first.' : 'O goes second.'}`
+        });
+      }
+      
+      // Update the page URL with the game ID for multiplayer games
+      if (gameMode === 'human') {
+        const url = new URL(window.location.href);
+        url.searchParams.set('game', gameId);
+        window.history.replaceState({}, '', url.toString());
+      }
     },
     
     // Leave Game method
@@ -706,6 +886,13 @@ export default {
       // Don't do anything if not in a game
       if (!this.inGame || !this.gameCode) {
         return;
+      }
+      
+      // Show a confirmation dialog if the game is active
+      if (!this.gameOver && this.gameMode === 'human') {
+        if (!confirm('Are you sure you want to leave? You will forfeit the game.')) {
+          return;
+        }
       }
       
       // Close WebSocket connection
@@ -716,7 +903,65 @@ export default {
       this.gameCode = null;
       this.playerSymbol = null;
       this.gameMode = null;
+      this.opponentDisconnected = false;
+      this.gameStatusText = null;
       this.resetGame();
+      
+      // Clear game parameter from URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('game');
+      window.history.replaceState({}, '', url.toString());
+    },
+    
+    // Attempt to reconnect to an ongoing game
+    async attemptReconnect() {
+      if (!this.gameCode) return;
+      
+      try {
+        // Try to reconnect to the WebSocket
+        this.gameService.connectToGameSocket(this.gameCode);
+        this.showNotification('Attempting to reconnect...', 'info');
+      } catch (error) {
+        console.error('Error reconnecting to game:', error);
+        this.showNotification('Failed to reconnect. Please try again.', 'error');
+      }
+    },
+    
+    // Window focus/blur event handlers
+    setupWindowEvents() {
+      window.addEventListener('focus', this.handleWindowFocus);
+      window.addEventListener('online', this.handleOnline);
+    },
+    
+    cleanupWindowEvents() {
+      window.removeEventListener('focus', this.handleWindowFocus);
+      window.removeEventListener('online', this.handleOnline);
+    },
+    
+    handleWindowFocus() {
+      // When window gets focus, check if we're in a game and try to reconnect
+      if (this.inGame && this.gameCode) {
+        // Check if connection is closed
+        if (!this.gameService.socket || this.gameService.socket.readyState !== WebSocket.OPEN) {
+          this.attemptReconnect();
+        }
+      }
+    },
+    
+    handleOnline() {
+      // When coming back online, attempt to reconnect to any active game
+      if (this.inGame && this.gameCode) {
+        this.attemptReconnect();
+      }
+    },
+    
+    handleBeforeUnload(event) {
+      if (this.inGame && !this.gameOver && this.gameMode === 'human') {
+        // Standard way to show a confirmation dialog when leaving the page
+        const message = 'Leaving this page will forfeit the game. Are you sure?';
+        event.returnValue = message;
+        return message;
+      }
     },
     
     // Utility methods
@@ -795,6 +1040,19 @@ export default {
       if (this.$refs.gameChat) {
         this.$refs.gameChat.messages = [];
       }
+    }
+  },
+  
+  beforeDestroy() {
+    // Clean up event listeners
+    this.cleanupWindowEvents();
+    
+    // Remove beforeUnload handler
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
+    
+    // Close any active WebSocket connections
+    if (this.gameService) {
+      this.gameService.closeSocket();
     }
   }
 };

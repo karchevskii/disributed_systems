@@ -158,6 +158,9 @@ class GameService {
     // Close any existing socket connection
     this.closeSocket();
     
+    // Log connection attempt
+    console.log(`Attempting to connect to game ${gameId}`);
+    
     // Determine the appropriate WebSocket protocol
     const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     
@@ -167,6 +170,13 @@ class GameService {
     // Set up event handlers
     this.socket.onopen = () => {
       console.log('WebSocket connection established');
+      // Notify the application that connection is established
+      if (this.onSocketMessage) {
+        this.onSocketMessage({
+          type: 'connection_status',
+          status: 'connected'
+        });
+      }
     };
     
     this.socket.onmessage = (event) => {
@@ -183,16 +193,42 @@ class GameService {
       if (this.onError) {
         this.onError('Error connecting to game server', 'error');
       }
+      
+      // Notify about connection status
+      if (this.onSocketMessage) {
+        this.onSocketMessage({
+          type: 'connection_status',
+          status: 'error',
+          message: 'Connection error'
+        });
+      }
     };
     
-    this.socket.onclose = () => {
-      console.log('WebSocket connection closed');
+    this.socket.onclose = (event) => {
+      console.log(`WebSocket connection closed: ${event.code} - ${event.reason}`);
+      
+      // Notify about disconnection
+      if (this.onSocketMessage) {
+        this.onSocketMessage({
+          type: 'connection_status',
+          status: 'disconnected',
+          code: event.code,
+          reason: event.reason
+        });
+      }
     };
+    
+    return this.socket;
   }
 
   closeSocket() {
     if (this.socket) {
-      this.socket.close();
+      // Only attempt to close if the socket is not already closed
+      if (this.socket.readyState !== WebSocket.CLOSED && 
+          this.socket.readyState !== WebSocket.CLOSING) {
+        console.log('Closing WebSocket connection');
+        this.socket.close();
+      }
       this.socket = null;
     }
   }
@@ -221,6 +257,57 @@ class GameService {
         this.onError('Connection to game server lost', 'error');
       }
     }
+  }
+  
+  // Add these additional methods
+  
+  // Check if socket connection is active
+  isSocketConnected() {
+    return this.socket && this.socket.readyState === WebSocket.OPEN;
+  }
+
+  // Add a method to handle automatic reconnection
+  setupReconnection(gameId, maxAttempts = 3) {
+    let attempts = 0;
+    
+    const attemptReconnect = () => {
+      if (attempts >= maxAttempts) {
+        if (this.onError) {
+          this.onError('Failed to reconnect after multiple attempts', 'error');
+        }
+        return;
+      }
+      
+      attempts++;
+      console.log(`Reconnection attempt ${attempts}/${maxAttempts}`);
+      
+      // Try to reconnect
+      this.connectToGameSocket(gameId);
+    };
+    
+    // Setup reconnection on window focus if disconnected
+    const handleWindowFocus = () => {
+      if (!this.isSocketConnected() && gameId) {
+        attemptReconnect();
+      }
+    };
+    
+    // Setup reconnection when coming back online
+    const handleOnline = () => {
+      if (!this.isSocketConnected() && gameId) {
+        attemptReconnect();
+      }
+    };
+    
+    // Add event listeners
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('online', handleOnline);
+    
+    // Return a cleanup function
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('online', handleOnline);
+    };
   }
 }
 
