@@ -118,13 +118,12 @@ class GameService {
         credentials: 'include'
       });
       
-      // If we get a 404, it means there are no games yet (not an error)
-      if (response.status === 404) {
-        return { games: [] };
-      }
-      
+      // For any HTTP error, just return empty games array
+      // This includes 404, 403, 500, etc.
       if (!response.ok) {
-        throw new Error('Failed to get game history: ' + response.statusText);
+        console.log(`Game history API returned status: ${response.status}`);
+        // Return empty games array instead of throwing error
+        return { games: [] };
       }
       
       // Get the raw text first
@@ -143,7 +142,6 @@ class GameService {
         console.log('Raw response:', responseText);
         
         // If there's a parsing error, return an empty data structure
-        // that matches what the component expects
         return {
           games: []
         };
