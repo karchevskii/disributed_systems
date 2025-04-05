@@ -725,15 +725,57 @@ export default {
     },
     
     copyGameId() {
-      if (!this.gameCode) return;
+      if (!this.gameCode) {
+        console.error('No game code available to copy');
+        return;
+      }
       
-      navigator.clipboard.writeText(this.gameCode)
-        .then(() => {
-          this.showNotification('Game ID copied to clipboard!', 'success');
-        })
-        .catch(err => {
-          console.error('Could not copy text: ', err);
-        });
+      // Try using clipboard API
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(this.gameCode)
+          .then(() => {
+            this.showNotification('Game ID copied to clipboard!', 'success');
+          })
+          .catch(err => {
+            console.error('Could not copy text with clipboard API:', err);
+            this.fallbackCopy(this.gameCode);
+          });
+      } else {
+        // Fallback for browsers that don't support clipboard API
+        this.fallbackCopy(this.gameCode);
+      }
+    },
+
+    fallbackCopy(text) {
+      // Create temporary element
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      
+      // Make it invisible
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      
+      // Select and copy
+      textArea.focus();
+      textArea.select();
+      
+      let success = false;
+      try {
+        success = document.execCommand('copy');
+      } catch (err) {
+        console.error('Fallback copy failed:', err);
+      }
+      
+      // Clean up
+      document.body.removeChild(textArea);
+      
+      if (success) {
+        this.showNotification('Game ID copied to clipboard!', 'success');
+      } else {
+        this.showNotification('Failed to copy game ID. Game ID: ' + this.gameCode, 'error');
+      }
     },
     
     resetGame() {
