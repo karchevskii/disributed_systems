@@ -10,4 +10,4 @@ COPY ./alembic.ini /src/alembic.ini
 COPY ./app /src/app
 
 # start the app
-ENTRYPOINT ["gunicorn", "app.main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--log-level", "INFO", "--access-logfile", "-", "--error-logfile", "-"]
+ENTRYPOINT ["gunicorn", "app.main:app", "--workers", "2", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--log-level", "INFO", "--access-logfile", "-", "--error-logfile", "-"]
