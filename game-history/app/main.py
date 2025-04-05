@@ -118,6 +118,8 @@ async def get_games_history(
         else:
             game_dto.result = "loss"
 
+        game_dtos.append(game_dto)
+
     # Return wrapped in GamesDTO
     return GamesDTO(games=game_dtos)
 
