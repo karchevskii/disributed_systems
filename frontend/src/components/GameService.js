@@ -257,50 +257,6 @@ class GameService {
   isSocketConnected() {
     return this.socket && this.socket.readyState === WebSocket.OPEN;
   }
-
-  // Add a method to handle automatic reconnection
-  setupReconnection(gameId, maxAttempts = 3) {
-    let attempts = 0;
-    
-    const attemptReconnect = () => {
-      if (attempts >= maxAttempts) {
-        if (this.onError) {
-          this.onError('Failed to reconnect after multiple attempts', 'error');
-        }
-        return;
-      }
-      
-      attempts++;
-      console.log(`Reconnection attempt ${attempts}/${maxAttempts}`);
-      
-      // Try to reconnect
-      this.connectToGameSocket(gameId);
-    };
-    
-    // Setup reconnection on window focus if disconnected
-    const handleWindowFocus = () => {
-      if (!this.isSocketConnected() && gameId) {
-        attemptReconnect();
-      }
-    };
-    
-    // Setup reconnection when coming back online
-    const handleOnline = () => {
-      if (!this.isSocketConnected() && gameId) {
-        attemptReconnect();
-      }
-    };
-    
-    // Add event listeners
-    window.addEventListener('focus', handleWindowFocus);
-    window.addEventListener('online', handleOnline);
-    
-    // Return a cleanup function
-    return () => {
-      window.removeEventListener('focus', handleWindowFocus);
-      window.removeEventListener('online', handleOnline);
-    };
-  }
 }
 
 export default GameService;
