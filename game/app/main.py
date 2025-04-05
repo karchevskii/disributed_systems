@@ -711,18 +711,19 @@ async def create_game(data: CreateGameScheme, user=Depends(get_current_user)):
     # X always starts
     if data.symbol.value == "x":
         players = {"x": user["id"], "o": None}
-        current_player = user["id"]
+        current_player = user["id"]  # Player X starts
         if type == "bot":
             players["o"] = "bot"
             status = "active"
     else:
         players = {"x": None, "o": user["id"]}
+        current_player = None  # Will be set when player X joins
         if type == "bot":
             players["x"] = "bot"
-            current_player = "bot"
+            current_player = "bot"  # Bot starts as X
             status = "active"
         else:
-            current_player = None
+            current_player = None  # Will be set when player X joins
 
     game_data = {
         "id": game_id,
@@ -740,9 +741,8 @@ async def create_game(data: CreateGameScheme, user=Depends(get_current_user)):
     # Store game in Redis
     redis_client.set(f"game:{game_id}", json.dumps(game_data))
 
-    # Add to user's games list and to the list of open games
-    # redis.sadd(f"user:{user['id']}:games", game_id)
-    if type == "multiplayer":
+    # Add to the list of open games if it's a multiplayer game waiting for opponents
+    if type == "multiplayer" and (players["x"] is None or players["o"] is None):
         redis_client.sadd("open_games", game_id)
 
     return CreateGameDTO(**game_data)
@@ -773,9 +773,19 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     # Join as another player
     if game_data["players"]["x"] is None:
         game_data["players"]["x"] = user["id"]
-        game_data["current_player"] = user["id"]
+        # Set this player's turn if no moves have been made yet
+        if not game_data["moves"]:
+            game_data["current_player"] = user["id"]
     elif game_data["players"]["o"] is None:
         game_data["players"]["o"] = user["id"]
+        # Check who should have the current turn
+        # If X has moved, it should be O's turn now
+        if game_data["moves"] and len(game_data["moves"]) % 2 == 1:
+            game_data["current_player"] = user["id"]
+
+    # In all cases, ensure someone has the turn
+    if game_data["current_player"] is None:
+        game_data["current_player"] = game_data["players"]["x"]  # X always goes first
 
     game_data["status"] = "active"
     # Update game in Redis
