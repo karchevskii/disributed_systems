@@ -39,22 +39,40 @@
             </v-chip>
           </template>
 
-          <template v-slot:item.winner="{ item }">
-            <span v-if="item.winner === 'draw'">Draw</span>
-            <v-chip
-              v-else-if="item.winner === userId"
-              color="success"
-              x-small
-            >
-              Victory
-            </v-chip>
-            <v-chip
-              v-else
-              color="error"
-              x-small
-            >
-              Defeat
-            </v-chip>
+          <template v-slot:item.result="{ item }">
+            <span v-if="item.result === 'draw'">
+              <v-chip color="info" x-small>Draw</v-chip>
+            </span>
+            <span v-else-if="item.result === 'win'">
+              <v-chip color="success" x-small>
+                <v-icon left x-small>mdi-trophy</v-icon>
+                Victory
+              </v-chip>
+            </span>
+            <span v-else-if="item.result === 'loss'">
+              <v-chip color="error" x-small>
+                <v-icon left x-small>mdi-close</v-icon>
+                Defeat
+              </v-chip>
+            </span>
+            <span v-else>
+              <!-- Fallback for compatibility with old format -->
+              <span v-if="item.winner === 'draw'">Draw</span>
+              <v-chip
+                v-else-if="item.winner === userId || (item.winner === 'o' && item.player_o_id === userId) || (item.winner === 'x' && item.player_x_id === userId)"
+                color="success"
+                x-small
+              >
+                Victory
+              </v-chip>
+              <v-chip
+                v-else
+                color="error"
+                x-small
+              >
+                Defeat
+              </v-chip>
+            </span>
           </template>
 
           <template v-slot:item.created_at="{ item }">
@@ -105,9 +123,13 @@
                 <v-list-item-content>
                   <v-list-item-title>Result</v-list-item-title>
                   <v-list-item-subtitle>
-                    <span v-if="selectedGame.winner === 'draw'">Draw</span>
-                    <span v-else-if="selectedGame.winner === userId">Victory</span>
-                    <span v-else>Defeat</span>
+                    <v-chip 
+                      :color="getResultColor(selectedGame)"
+                      small
+                      class="mt-1"
+                    >
+                      {{ getResultText(selectedGame) }}
+                    </v-chip>
                   </v-list-item-subtitle>
                 </v-list-item-content>
               </v-list-item>
@@ -245,7 +267,7 @@ export default {
       playerSymbolInGame: 'x',
       headers: [
         { text: 'Type', value: 'game_type' },
-        { text: 'Result', value: 'winner' },
+        { text: 'Result', value: 'result' },
         { text: 'Date', value: 'created_at' },
         { text: 'Actions', value: 'actions', sortable: false }
       ]
@@ -324,6 +346,18 @@ export default {
               game.moves = [];
             }
             
+            // If game doesn't have a result field, determine it from the winner field
+            if (!game.result) {
+              if (game.winner === 'draw') {
+                game.result = 'draw';
+              } else if ((game.winner === 'x' && game.player_x_id === this.userId) || 
+                         (game.winner === 'o' && game.player_o_id === this.userId)) {
+                game.result = 'win';
+              } else {
+                game.result = 'loss';
+              }
+            }
+            
             return game;
           });
         } catch (parseError) {
@@ -365,6 +399,50 @@ export default {
       
       // Initialize replay
       this.initializeReplay();
+    },
+    
+    getResultColor(game) {
+      if (!game) return 'info';
+      
+      if (game.result === 'win') {
+        return 'success';
+      } else if (game.result === 'loss') {
+        return 'error';
+      } else if (game.result === 'draw') {
+        return 'info';
+      } else {
+        // Legacy format fallback
+        if (game.winner === 'draw') {
+          return 'info';
+        } else if ((game.winner === 'x' && game.player_x_id === this.userId) || 
+                  (game.winner === 'o' && game.player_o_id === this.userId)) {
+          return 'success';
+        } else {
+          return 'error';
+        }
+      }
+    },
+    
+    getResultText(game) {
+      if (!game) return '';
+      
+      if (game.result === 'win') {
+        return 'Victory';
+      } else if (game.result === 'loss') {
+        return 'Defeat';
+      } else if (game.result === 'draw') {
+        return 'Draw';
+      } else {
+        // Legacy format fallback
+        if (game.winner === 'draw') {
+          return 'Draw';
+        } else if ((game.winner === 'x' && game.player_x_id === this.userId) || 
+                  (game.winner === 'o' && game.player_o_id === this.userId)) {
+          return 'Victory';
+        } else {
+          return 'Defeat';
+        }
+      }
     },
     
     initializeReplay() {
