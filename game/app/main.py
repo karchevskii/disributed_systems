@@ -773,27 +773,25 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     # Join as another player
     if game_data["players"]["x"] is None:
         game_data["players"]["x"] = user["id"]
-        # Set this player's turn if no moves have been made yet
-        if not game_data["moves"]:
-            game_data["current_player"] = user["id"]
-    elif game_data["players"]["o"] is None:
+    else:  # Must be joining as player "o"
         game_data["players"]["o"] = user["id"]
-        # Check who should have the current turn
-        # If X has moved, it should be O's turn now
-        if game_data["moves"] and len(game_data["moves"]) % 2 == 1:
-            game_data["current_player"] = user["id"]
+    
+    # Determine whose turn it should be based on number of moves
+    num_moves = len(game_data["moves"])
+    
+    if num_moves % 2 == 0:
+        game_data["current_player"] = game_data["players"]["x"]
+    else:
+        game_data["current_player"] = game_data["players"]["o"]
 
-    # In all cases, ensure someone has the turn
-    if game_data["current_player"] is None:
-        game_data["current_player"] = game_data["players"]["x"]  # X always goes first
-
+    # Set game to active now that both players are joined
     game_data["status"] = "active"
+    
     # Update game in Redis
     redis_client.set(f"game:{game_id}", json.dumps(game_data))
     redis_client.srem("open_games", game_id)  # Remove from open games
 
     return game_data
-
 
 @app.get("/health")
 async def health_check():
