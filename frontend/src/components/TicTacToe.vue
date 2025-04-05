@@ -336,7 +336,7 @@ export default {
     this.gameApiUrl = gameApiUrl;
     this.gameService = new GameService(
       'http://tictactoe.local/users-service',
-      'http://tictactoe.local/games-service',
+      'http://tictactoe.local/game-service',
       this.handleSocketMessage.bind(this),
       this.showNotification.bind(this)
     );
@@ -712,18 +712,6 @@ export default {
       this.snackbar.show = true;
     },
     
-    copyGameLink() {
-      if (!this.inviteLink) return;
-      
-      navigator.clipboard.writeText(this.inviteLink)
-        .then(() => {
-          this.showNotification('Invite link copied to clipboard!', 'success');
-        })
-        .catch(err => {
-          console.error('Could not copy text: ', err);
-        });
-    },
-    
     copyGameId() {
       if (!this.gameCode) {
         console.error('No game code available to copy');
@@ -745,7 +733,7 @@ export default {
         this.fallbackCopy(this.gameCode);
       }
     },
-
+    
     fallbackCopy(text) {
       // Create temporary element
       const textArea = document.createElement('textarea');
