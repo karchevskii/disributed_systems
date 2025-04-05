@@ -642,9 +642,17 @@ export default {
             this.winner = gameData.winner.toUpperCase();
           }
           
-          // Handle player disconnection notifications
-          if (data.disconnection) {
-            this.showNotification(data.message || "Your opponent disconnected", "success");
+          // Handle player disconnection notifications, but only if:
+          // 1. There's an explicit disconnection flag
+          // 2. The disconnection caused the game to end (check last move)
+          if (data.disconnection && gameData.moves && gameData.moves.length > 0) {
+            const lastMove = gameData.moves[gameData.moves.length - 1];
+            
+            // Only show disconnect notification if the last move was a disconnection event
+            // and not a regular move (which would indicate the game ended normally)
+            if (lastMove.action === 'disconnect' || lastMove.action === 'disconnect_timeout') {
+              this.showNotification(data.message || "Your opponent disconnected", "success");
+            }
           }
         }
         
