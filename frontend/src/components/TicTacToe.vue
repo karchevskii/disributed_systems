@@ -660,7 +660,7 @@ export default {
         const connectedSymbol = data.player.toUpperCase();
         if (connectedSymbol !== this.playerSymbol) {
           // Only show notification if it's the opponent who reconnected
-          this.showNotification(`Your opponent (${connectedSymbol}) has rejoined the game.`, 'success');
+          this.showNotification(`Your opponent (${connectedSymbol}) has joined the game.`, 'success');
         }
       } else if (data.type === 'error') {
         this.showNotification(data.message, 'error');
