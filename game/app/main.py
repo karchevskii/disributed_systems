@@ -1,21 +1,28 @@
 import asyncio
+from contextlib import asynccontextmanager
 import datetime
 import json
-import threading
 from typing import Dict, Optional
 import uuid
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 
+from app.utils import check_winner, best_move
 from app.schemes import CreateGameDTO, CreateGameScheme
 from app.core.config import settings
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(cleanup_stale_games())
+    yield
+
 app = FastAPI(title=settings.PROJECT_NAME,
-              root_path="/game-service")
+              root_path="/game-service", lifespan=lifespan)
 
 
 redis_client = redis.Redis(
@@ -93,7 +100,7 @@ class ConnectionManager:
     def __init__(self):
         # {game_id: {player_id: WebSocket}}
         self.active_connections: Dict[str, Dict[str, WebSocket]] = {}
-        
+
         # Create Redis pub/sub for cross-instance communication
         self.redis_pubsub = redis.Redis(
             host=settings.REDIS_HOST,
@@ -102,24 +109,25 @@ class ConnectionManager:
             password=settings.REDIS_PASSWORD,
             decode_responses=True
         ).pubsub()
-        
+
         # Track our own instance ID to avoid broadcasting to ourselves
         self.instance_id = str(uuid.uuid4())
-        
+
         # Subscribe to the websocket broadcast channel
         self.redis_pubsub.subscribe('websocket_broadcasts')
-        
-        # Flag to indicate if polling task is running
+
+        # Flags to indicate if tasks are running
         self.polling_task = None
-        
+        self.monitoring_task = None
+
     async def connect(self, websocket: WebSocket, game_id: str, player_id: str):
         """Connect a player's websocket"""
         await websocket.accept()
         if game_id not in self.active_connections:
             self.active_connections[game_id] = {}
         self.active_connections[game_id][player_id] = websocket
-        
-        # Ensure polling is started when first connection happens
+
+        # Ensure tasks are started when first connection happens
         if self.polling_task is None or self.polling_task.done():
             self.start_polling()
 
@@ -129,13 +137,20 @@ class ConnectionManager:
             # Only start if there's a running event loop
             loop = asyncio.get_running_loop()
             self.polling_task = loop.create_task(self._poll_for_messages())
+
+            # Also start monitoring if not already running
+            if self.monitoring_task is None or self.monitoring_task.done():
+                self.monitoring_task = loop.create_task(
+                    self.monitor_connections())
         except RuntimeError:
             # No running event loop - this is fine, we'll start when needed
-            logger.info("No event loop running, will start polling when connections are made")
-    
+            logger.info(
+                "No event loop running, will start tasks when connections are made")
+
     async def _poll_for_messages(self):
         """Poll for messages from Redis in an async way"""
-        logger.info(f"Starting Redis pubsub polling for instance {self.instance_id}")
+        logger.info(
+            f"Starting Redis pubsub polling for instance {self.instance_id}")
         try:
             while True:
                 try:
@@ -144,7 +159,7 @@ class ConnectionManager:
                         await self._handle_pubsub_message(message)
                 except Exception as e:
                     logger.error(f"Error in polling loop: {e}")
-                
+
                 # Don't hog the event loop
                 await asyncio.sleep(0.01)
         except asyncio.CancelledError:
@@ -154,7 +169,7 @@ class ConnectionManager:
             logger.error(f"Polling task encountered an error: {e}")
             # Re-raise to let the task fail and potentially be restarted
             raise
-    
+
     def disconnect(self, game_id: str, player_id: str):
         """Disconnect a player"""
         if game_id in self.active_connections:
@@ -162,25 +177,29 @@ class ConnectionManager:
                 del self.active_connections[game_id][player_id]
             if not self.active_connections[game_id]:  # If empty
                 del self.active_connections[game_id]
-        
-        # Stop polling if no more connections
-        if not self.active_connections and self.polling_task:
-            self.polling_task.cancel()
-            self.polling_task = None
-    
+
+        # Stop tasks if no more connections
+        if not self.active_connections:
+            if self.polling_task:
+                self.polling_task.cancel()
+                self.polling_task = None
+            if self.monitoring_task:
+                self.monitoring_task.cancel()
+                self.monitoring_task = None
+
     async def _handle_pubsub_message(self, message):
         """Handle incoming pub/sub messages"""
         try:
             data = json.loads(message['data'])
-            
+
             # Skip messages from our own instance
             if data.get('instance_id') == self.instance_id:
                 return
-                
+
             game_id = data.get('game_id')
             exclude_player = data.get('exclude_player')
             payload = data.get('payload')
-            
+
             # Forward the message to all local connections for this game
             if game_id in self.active_connections:
                 for player_id, conn in self.active_connections[game_id].items():
@@ -188,7 +207,8 @@ class ConnectionManager:
                         try:
                             await conn.send_json(payload)
                         except Exception as e:
-                            logger.error(f"Error sending to player {player_id}: {e}")
+                            logger.error(
+                                f"Error sending to player {player_id}: {e}")
         except Exception as e:
             logger.error(f"Error processing pub/sub message: {e}")
 
@@ -206,8 +226,9 @@ class ConnectionManager:
                     try:
                         await connection.send_json(message)
                     except Exception as e:
-                        logger.error(f"Error broadcasting to player {player_id}: {e}")
-        
+                        logger.error(
+                            f"Error broadcasting to player {player_id}: {e}")
+
         # Then, publish to Redis for other instances
         redis_message = {
             'instance_id': self.instance_id,
@@ -215,58 +236,123 @@ class ConnectionManager:
             'exclude_player': exclude,
             'payload': message
         }
-        
+
         # Use the global redis client for publishing
         try:
-            redis_client.publish('websocket_broadcasts', json.dumps(redis_message))
+            redis_client.publish('websocket_broadcasts',
+                                 json.dumps(redis_message))
         except Exception as e:
             logger.error(f"Error publishing broadcast to Redis: {e}")
+
+    async def monitor_connections(self):
+        """Monitor active connections and handle timeouts"""
+        while True:
+            try:
+                games_to_check = list(self.active_connections.keys())
+
+                for game_id in games_to_check:
+                    # Get game data
+                    game_data_str = redis_client.get(f"game:{game_id}")
+                    if not game_data_str:
+                        continue
+
+                    game_data = json.loads(game_data_str)
+
+                    # Only monitor active multiplayer games
+                    if game_data["status"] != "active" or game_data["type"] != "multiplayer":
+                        continue
+
+                    # Check if we should have two players but only one is connected
+                    players = list(self.active_connections[game_id].keys())
+                    if len(players) == 1 and game_data["players"]["x"] and game_data["players"]["o"]:
+                        connected_player_id = players[0]
+
+                        # Determine the disconnected player and symbols
+                        disconnected_player_id = None
+                        connected_symbol = None
+                        disconnected_symbol = None
+
+                        if connected_player_id == game_data["players"]["x"]:
+                            disconnected_player_id = game_data["players"]["o"]
+                            connected_symbol = "x"
+                            disconnected_symbol = "o"
+                        else:
+                            disconnected_player_id = game_data["players"]["x"]
+                            connected_symbol = "o"
+                            disconnected_symbol = "x"
+
+                        # Check if we've waited long enough (30 seconds) since last activity
+                        # to declare a disconnect win
+                        last_activity_time = datetime.datetime.now()
+                        if game_data["moves"]:
+                            last_move_time = datetime.datetime.fromisoformat(
+                                game_data["moves"][-1]["timestamp"])
+                            last_activity_time = last_move_time
+
+                        time_since_last_activity = (
+                            datetime.datetime.now() - last_activity_time).total_seconds()
+
+                        if time_since_last_activity > 30:  # 30 seconds timeout
+                            # Mark game as completed with the connected player as winner
+                            game_data["status"] = "completed"
+                            game_data["winner"] = connected_symbol
+
+                            # Add disconnect information
+                            game_data["moves"].append({
+                                "player": disconnected_player_id,
+                                "symbol": disconnected_symbol,
+                                "position": None,
+                                "action": "disconnect_timeout",
+                                "timestamp": datetime.datetime.now().isoformat()
+                            })
+
+                            # Save to Redis
+                            redis_client.set(
+                                f"game:{game_id}", json.dumps(game_data))
+                            redis_client.xadd("completed_games", {
+                                              "data": json.dumps(game_data)})
+
+                            # Notify the remaining player
+                            try:
+                                connected_ws = self.active_connections[game_id][connected_player_id]
+                                await connected_ws.send_json({
+                                    "type": "game_state",
+                                    "game": game_data,
+                                    "disconnection": True,
+                                    "message": f"Your opponent disconnected. You win!"
+                                })
+                            except Exception as e:
+                                logger.error(
+                                    f"Error notifying player about disconnect win: {e}")
+
+                            asyncio.create_task(cleanup_game(game_id))
+
+            except Exception as e:
+                logger.error(f"Error in connection monitoring: {e}")
+
+            await asyncio.sleep(5)  # Check every 5 seconds
+
 
 # Initialize the manager
 manager = ConnectionManager()
 
 
-def minimax(board, is_maximizing):
-    winner = check_winner(board)
-    if winner == "x":
-        return 1
-    if winner == "o":
-        return -1
-    if "" not in board:
-        return 0
+async def cleanup_game(game_id: str, delay_seconds: int = 10):
+    """
+    Delete a game from Redis after an optional delay to ensure clients receive final state.
 
-    if is_maximizing:
-        best_score = -float("inf")
-        for i in range(9):
-            if board[i] == "":
-                board[i] = "x"
-                score = minimax(board, False)
-                board[i] = ""
-                best_score = max(score, best_score)
-        return best_score
-    else:
-        best_score = float("inf")
-        for i in range(9):
-            if board[i] == "":
-                board[i] = "o"
-                score = minimax(board, True)
-                board[i] = ""
-                best_score = min(score, best_score)
-        return best_score
+    Args:
+        game_id: The ID of the game to delete
+        delay_seconds: Number of seconds to wait before deletion (default 10)
+    """
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
 
-
-def best_move(board):
-    best_score = -float("inf")
-    move = None
-    for i in range(9):
-        if board[i] == "":
-            board[i] = "x"
-            score = minimax(board, False)
-            board[i] = ""
-            if score > best_score:
-                best_score = score
-                move = i
-    return move
+    # Delete the game data
+    redis_client.delete(f"game:{game_id}")
+    # Also remove from open games set if present
+    redis_client.srem("open_games", game_id)
+    logger.info(f"Cleaned up game {game_id} from Redis")
 
 
 @app.websocket("/ws/game/{game_id}")
@@ -390,12 +476,16 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                         game_data["status"] = "completed"
                         # send complete game to Redis message queue to be saved in the database by another service
                         redis_client.xadd("completed_games", {
-                                   "data": json.dumps(game_data)})
+                                          "data": json.dumps(game_data)})
+                        # Schedule cleanup
+                        asyncio.create_task(cleanup_game(game_id))
                     elif "" not in game_data["board"]:  # Board is full
                         game_data["status"] = "completed"
                         game_data["winner"] = "draw"
                         redis_client.xadd("completed_games", {
-                                   "data": json.dumps(game_data)})
+                                          "data": json.dumps(game_data)})
+                        # Schedule cleanup
+                        asyncio.create_task(cleanup_game(game_id))
                     else:
                         # Switch turns
                         game_data["current_player"] = (
@@ -521,23 +611,29 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                         game_data["winner"] = winner
                         game_data["status"] = "completed"
                         redis_client.xadd("completed_games", {
-                                   "data": json.dumps(game_data)})
-                        redis_client.set(f"game:{game_id}", json.dumps(game_data))
+                                          "data": json.dumps(game_data)})
+                        redis_client.set(
+                            f"game:{game_id}", json.dumps(game_data))
                         await websocket.send_json({
                             "type": "game_state",
                             "game": game_data
                         })
+                        # Schedule cleanup
+                        asyncio.create_task(cleanup_game(game_id))
                         continue
                     elif "" not in game_data["board"]:  # Board is full
                         game_data["status"] = "completed"
                         game_data["winner"] = "draw"
                         redis_client.xadd("completed_games", {
-                                   "data": json.dumps(game_data)})
-                        redis_client.set(f"game:{game_id}", json.dumps(game_data))
+                            "data": json.dumps(game_data)})
+                        redis_client.set(
+                            f"game:{game_id}", json.dumps(game_data))
                         await websocket.send_json({
                             "type": "game_state",
                             "game": game_data
                         })
+                        # Schedule cleanup
+                        asyncio.create_task(cleanup_game(game_id))
                         continue
 
                     # Change turn to bot
@@ -605,12 +701,12 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                         game_data["winner"] = winner
                         game_data["status"] = "completed"
                         redis_client.xadd("completed_games", {
-                                   "data": json.dumps(game_data)})
+                            "data": json.dumps(game_data)})
                     elif "" not in game_data["board"]:  # Board is full
                         game_data["status"] = "completed"
                         game_data["winner"] = "draw"
                         redis_client.xadd("completed_games", {
-                                   "data": json.dumps(game_data)})
+                            "data": json.dumps(game_data)})
 
                     # Change turn back to player
                     game_data["current_player"] = user["id"]
@@ -654,32 +750,81 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     except WebSocketDisconnect:
         # Handle disconnection
         manager.disconnect(game_id, user["id"])
-        await manager.broadcast(
-            {"type": "player_disconnected", "player": player_symbol},
-            game_id
-        )
 
-# Helper function to check for a winner
+        # Get fresh game data
+        game_data_str = redis_client.get(f"game:{game_id}")
+        if game_data_str:
+            game_data = json.loads(game_data_str)
 
+            # Only handle active multiplayer games
+            if game_data["status"] == "active" and game_data["type"] == "multiplayer":
+                # Mark game as completed with the other player as winner
+                game_data["status"] = "completed"
 
-def check_winner(board):
-    # Check rows
-    for i in range(0, 9, 3):
-        if board[i] == board[i+1] == board[i+2] != "":
-            return board[i]
+                # Determine winner (the player who didn't disconnect)
+                other_player_id = None
+                if user["id"] == game_data["players"]["x"]:
+                    game_data["winner"] = "o"  # Other player wins
+                    other_player_id = game_data["players"]["o"]
+                else:
+                    game_data["winner"] = "x"  # Other player wins
+                    other_player_id = game_data["players"]["x"]
 
-    # Check columns
-    for i in range(3):
-        if board[i] == board[i+3] == board[i+6] != "":
-            return board[i]
+                # Add disconnect information to the moves list
+                game_data["moves"].append({
+                    "player": user["id"],
+                    "symbol": player_symbol,
+                    "position": None,  # No position for disconnect
+                    "action": "disconnect",
+                    "timestamp": datetime.datetime.now().isoformat()
+                })
 
-    # Check diagonals
-    if board[0] == board[4] == board[8] != "":
-        return board[0]
-    if board[2] == board[4] == board[6] != "":
-        return board[2]
+                # Save to Redis
+                redis_client.set(f"game:{game_id}", json.dumps(game_data))
 
-    return None
+                # Record the completed game
+                redis_client.xadd("completed_games", {
+                                  "data": json.dumps(game_data)})
+
+                # Notify the remaining player about the win
+                await manager.broadcast(
+                    {
+                        "type": "game_state",
+                        "game": game_data,
+                        "disconnection": True,
+                        "message": f"Player {player_symbol} disconnected. You win!"
+                    },
+                    game_id
+                )
+                # Schedule cleanup
+                asyncio.create_task(cleanup_game(game_id))
+            elif game_data["status"] == "waiting" and game_data["type"] == "multiplayer" and game_data["created_by"] == user["id"]:
+                # Creator of a waiting game disconnected, mark the game as abandoned
+                game_data["status"] = "abandoned"
+
+                # Record the abandonment in moves list
+                game_data["moves"].append({
+                    "player": user["id"],
+                    "symbol": player_symbol,
+                    "position": None,
+                    "action": "creator_abandoned",
+                    "timestamp": datetime.datetime.now().isoformat()
+                })
+
+                # Update Redis and remove from open games
+                redis_client.set(f"game:{game_id}", json.dumps(game_data))
+                redis_client.srem("open_games", game_id)
+
+                logger.info(
+                    f"Game {game_id} marked as abandoned after creator disconnected")
+                # Schedule cleanup
+                asyncio.create_task(cleanup_game(game_id))
+            else:
+                # Just notify about disconnection for non-active or bot games
+                await manager.broadcast(
+                    {"type": "player_disconnected", "player": player_symbol},
+                    game_id
+                )
 
 
 @app.get("/games/open", response_model=list[CreateGameDTO])
@@ -775,10 +920,10 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
         game_data["players"]["x"] = user["id"]
     else:  # Must be joining as player "o"
         game_data["players"]["o"] = user["id"]
-    
+
     # Determine whose turn it should be based on number of moves
     num_moves = len(game_data["moves"])
-    
+
     if num_moves % 2 == 0:
         game_data["current_player"] = game_data["players"]["x"]
     else:
@@ -786,12 +931,13 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
 
     # Set game to active now that both players are joined
     game_data["status"] = "active"
-    
+
     # Update game in Redis
     redis_client.set(f"game:{game_id}", json.dumps(game_data))
     redis_client.srem("open_games", game_id)  # Remove from open games
 
     return game_data
+
 
 @app.get("/health")
 async def health_check():
@@ -809,3 +955,48 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+
+async def cleanup_stale_games():
+    """Background task to clean up old games from Redis"""
+    try:
+        while True:
+            try:
+                # Get all game keys
+                game_keys = redis_client.keys("game:*")
+                current_time = datetime.datetime.now()
+
+                for game_key in game_keys:
+                    game_data_str = redis_client.get(game_key)
+                    if not game_data_str:
+                        continue
+
+                    game_data = json.loads(game_data_str)
+                    game_id = game_data["id"]
+
+                    # Check if game is already completed or abandoned
+                    if game_data["status"] in ["completed", "abandoned"]:
+                        # Remove completed games older than 5 minutes
+                        if "moves" in game_data and game_data["moves"]:
+                            last_move_time = datetime.datetime.fromisoformat(
+                                game_data["moves"][-1]["timestamp"])
+                            if (current_time - last_move_time).total_seconds() > 300:  # 5 minutes
+                                await cleanup_game(game_id, delay_seconds=0)
+
+                    # Check for old waiting games
+                    elif game_data["status"] == "waiting":
+                        created_time = datetime.datetime.fromisoformat(
+                            game_data["created_at"])
+                        # Remove waiting games older than 30 minutes
+                        if (current_time - created_time).total_seconds() > 1800:  # 30 minutes
+                            game_data["status"] = "expired"
+                            redis_client.set(game_key, json.dumps(game_data))
+                            await cleanup_game(game_id, delay_seconds=0)
+                            logger.info(
+                                f"Expired stale waiting game {game_id}")
+            except Exception as e:
+                logger.error(f"Error in cleanup_stale_games: {e}")
+
+            await asyncio.sleep(300)  # Run every 5 minutes
+    except asyncio.CancelledError:
+        logger.info("Stale game cleanup task cancelled")
