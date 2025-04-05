@@ -1,8 +1,11 @@
+# Namespace
+kubectl apply -f namespace.yaml
+
+kubectl create secret tls cloudflare-origin-cert --key=./origin-private-key.pem --cert=./origin-cert.pem -n tictactoe
+
 kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
 sleep 25
 
-# Namespace
-kubectl apply -f namespace.yaml
 
 # Secrets
 kubectl apply -f redis-secret.yaml
@@ -27,4 +30,4 @@ kubectl apply -f game.yaml
 kubectl apply -f frontend.yaml
 
 #Ingress
-kubectl apply -f ingress.yaml
+kubectl apply -f ingress-deploy.yaml

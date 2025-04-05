@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tictactoe-ingress
+  namespace: tictactoe
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/use-forwarded-headers: "true"
+    nginx.ingress.kubernetes.io/x-forwarded-for-header: "CF-Connecting-IP"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+      - ttt.karchevskii.com
+    secretName: cloudflare-origin-cert
+  rules:
+  - host: ttt.karchevskii.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+      - path: /users-service
+        pathType: Prefix
+        backend:
+          service:
+            name: users
+            port:
+              number: 8000
+      - path: /game-service
+        pathType: Prefix
+        backend:
+          service:
+            name: game
+            port:
+              number: 8000
+      - path: /history-service
+        pathType: Prefix
+        backend:
+          service:
+            name: game-history
+            port:
+              number: 8000

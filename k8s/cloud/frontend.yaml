@@ -21,15 +21,15 @@ spec:
         - containerPort: 80
         env:
           - name: SERVER_NAME
-            value: "http://tictactoe.local"
+            value: "https://ttt.karchevskii.com"
           - name: VUE_APP_USERS_SERVICE_URL
-            value: "http://tictactoe.local/users-service"
+            value: "https://ttt.karchevskii.com/users-service"
           - name: VUE_APP_GAME_SERVICE_URL
-            value: "http://tictactoe.local/game-service"
+            value: "https://ttt.karchevskii.com/game-service"
           - name: VUE_APP_HISTORY_SERVICE_URL
-            value: "http://tictactoe.local/history-service"
+            value: "https://ttt.karchevskii.com/history-service"
           - name: VUE_APP_WS_HOST
-            value: "tictactoe.local/game-service"
+            value: "ttt.karchevskii.com/game-service"
 ---
 apiVersion: v1
 kind: Service

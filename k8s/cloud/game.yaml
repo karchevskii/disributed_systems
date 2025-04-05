@@ -57,7 +57,7 @@ spec:
               - name: USERS_SERVICE_URL
                 value: "http://users:8000/users-service"
               - name: CORS_URL
-                value: "http://tictactoe.local"
+                value: "https://ttt.karchevskii.com"
 
           readinessProbe:
             httpGet:

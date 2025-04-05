@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users
+  namespace: tictactoe
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: users
+  template:
+    metadata:
+      labels:
+        app: users
+    spec:
+      initContainers:
+          - name: wait-database
+            image: postgres:14-alpine
+            imagePullPolicy: IfNotPresent  # Only pull if not available locally
+            command:
+              [
+                'sh', '-c',
+                'until pg_isready -h ${POSTGRES_SERVER} -p 5432; 
+                do echo "Waiting for database to be ready..."; 
+                sleep 2; 
+                done;']
+            env:
+              - name: POSTGRES_SERVER
+                value: "users-db-cluster-rw"
+          - name: perform-migrations
+            image: karchevskii/distr_sys-users_service:latest
+            imagePullPolicy: Always
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                echo "Environment variables:"
+                env | grep -i postgres
+                echo "Testing database connection..."
+                PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_SERVER -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1;"
+                echo "Running migrations..."
+                alembic upgrade head || { echo "Migration failed with code $?"; exit 1; }
+                echo "Migrations completed successfully"
+            envFrom:
+              - secretRef:
+                  name: users-service-creds
+            env:
+              - name: POSTGRES_SERVER
+                value: "users-db-cluster-rw"
+              - name: POSTGRES_PORT
+                value: "5432"
+              - name: POSTGRES_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: users-postgres-service-creds
+                    key: password
+              - name: POSTGRES_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: users-postgres-service-creds
+                    key: username
+              - name: POSTGRES_DB
+                valueFrom:
+                  secretKeyRef:
+                    name: users-postgres-service-creds
+                    key: dbname
+                
+      containers:
+        - name: users
+          image: karchevskii/distr_sys-users_service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: users-service-creds
+          env:
+              - name: POSTGRES_SERVER
+                value: "users-db-cluster-rw"
+              - name: POSTGRES_PORT
+                value: "5432"
+              - name: POSTGRES_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: users-postgres-service-creds
+                    key: password
+              - name: POSTGRES_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: users-postgres-service-creds
+                    key: username
+              - name: POSTGRES_DB
+                valueFrom:
+                  secretKeyRef:
+                    name: users-postgres-service-creds
+                    key: dbname
+              
+          readinessProbe:
+            httpGet:
+              path: /users-service/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /users-service/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "512m"
+              memory: "384Mi"
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users
+  namespace: tictactoe
+spec:
+  selector:
+    app: users
+  ports:
+    - port: 8000
+      targetPort: 8000

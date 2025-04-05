@@ -1,3 +1,6 @@
 *-secret.yaml
 !example-*
 istio*
+!istio.sh
+!istio-cleanup.sh
+*.pem

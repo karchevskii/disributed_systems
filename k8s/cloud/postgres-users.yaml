@@ -1,0 +1,25 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: users-db-cluster
+  namespace: tictactoe
+spec:
+  instances: 3
+
+  storage:
+    size: 1Gi
+    
+  # Define the default database that will be created
+  bootstrap:
+    initdb:
+      database: users
+      owner: users-user
+      secret:
+        name: users-postgres-service-creds
+    
+  # Configure application user credentials
+  # This user will have access to the database specified in bootstrap
+  managed:
+    roles:
+      - name: users-user
+        login: true
