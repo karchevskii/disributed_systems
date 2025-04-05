@@ -1,18 +1,10 @@
 class GameService {
   constructor(apiBaseUrl, gameApiUrl, onSocketMessage, onError) {
-    // For development outside Docker
-    if (window.location.hostname === 'localhost') {
-      this.apiBaseUrl = 'http://tictactoe.local/users-service';
-      this.gameApiUrl = 'http://tictactoe.local/game-service';
-      this.gameHistoryApiUrl = 'http://tictactoe.local/history-service';
-      this.wsHost = 'tictactoe.local/game-service';
-    } else {
-      // For production/Docker environment
-      this.apiBaseUrl = 'http://tictactoe.local/users-service';
-      this.gameApiUrl = 'http://tictactoe.local/game-service';
-      this.gameHistoryApiUrl = 'http://tictactoe.local/history-service';
-      this.wsHost = 'tictactoe.local/game-service';
-    }
+    // Use environment variables with fallbacks
+    this.apiBaseUrl = process.env.VUE_APP_USERS_SERVICE_URL || apiBaseUrl || 'http://tictactoe.local/users-service';
+    this.gameApiUrl = process.env.VUE_APP_GAME_SERVICE_URL || gameApiUrl || 'http://tictactoe.local/game-service';
+    this.gameHistoryApiUrl = process.env.VUE_APP_HISTORY_SERVICE_URL || 'http://tictactoe.local/history-service';
+    this.wsHost = process.env.VUE_APP_WS_HOST || 'tictactoe.local/game-service';
     
     this.onSocketMessage = onSocketMessage;
     this.onError = onError;
@@ -264,50 +256,6 @@ class GameService {
   // Check if socket connection is active
   isSocketConnected() {
     return this.socket && this.socket.readyState === WebSocket.OPEN;
-  }
-
-  // Add a method to handle automatic reconnection
-  setupReconnection(gameId, maxAttempts = 3) {
-    let attempts = 0;
-    
-    const attemptReconnect = () => {
-      if (attempts >= maxAttempts) {
-        if (this.onError) {
-          this.onError('Failed to reconnect after multiple attempts', 'error');
-        }
-        return;
-      }
-      
-      attempts++;
-      console.log(`Reconnection attempt ${attempts}/${maxAttempts}`);
-      
-      // Try to reconnect
-      this.connectToGameSocket(gameId);
-    };
-    
-    // Setup reconnection on window focus if disconnected
-    const handleWindowFocus = () => {
-      if (!this.isSocketConnected() && gameId) {
-        attemptReconnect();
-      }
-    };
-    
-    // Setup reconnection when coming back online
-    const handleOnline = () => {
-      if (!this.isSocketConnected() && gameId) {
-        attemptReconnect();
-      }
-    };
-    
-    // Add event listeners
-    window.addEventListener('focus', handleWindowFocus);
-    window.addEventListener('online', handleOnline);
-    
-    // Return a cleanup function
-    return () => {
-      window.removeEventListener('focus', handleWindowFocus);
-      window.removeEventListener('online', handleOnline);
-    };
   }
 }
 
