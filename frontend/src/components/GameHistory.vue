@@ -39,22 +39,28 @@
             </v-chip>
           </template>
 
-          <template v-slot:item.winner="{ item }">
-            <span v-if="item.winner === 'draw'">Draw</span>
-            <v-chip
-              v-else-if="item.winner === userId"
-              color="success"
-              x-small
-            >
-              Victory
-            </v-chip>
-            <v-chip
-              v-else
-              color="error"
-              x-small
-            >
-              Defeat
-            </v-chip>
+          <template v-slot:item.result="{ item }">
+            <span v-if="item.result === 'draw'">
+              <v-chip color="info" x-small>Draw</v-chip>
+            </span>
+            <span v-else-if="item.result === 'win'">
+              <v-chip color="success" x-small>
+                <v-icon left x-small>mdi-trophy</v-icon>
+                Victory
+              </v-chip>
+            </span>
+            <span v-else-if="item.result === 'loss'">
+              <v-chip color="error" x-small>
+                <v-icon left x-small>mdi-close</v-icon>
+                Defeat
+              </v-chip>
+            </span>
+            <span v-else>
+              <!-- Fallback if result field isn't present -->
+              <v-chip color="warning" x-small>
+                {{ item.winner === userId ? 'Win' : item.winner === 'draw' ? 'Draw' : 'Loss' }}
+              </v-chip>
+            </span>
           </template>
 
           <template v-slot:item.created_at="{ item }">
@@ -105,9 +111,13 @@
                 <v-list-item-content>
                   <v-list-item-title>Result</v-list-item-title>
                   <v-list-item-subtitle>
-                    <span v-if="selectedGame.winner === 'draw'">Draw</span>
-                    <span v-else-if="selectedGame.winner === userId">Victory</span>
-                    <span v-else>Defeat</span>
+                    <v-chip 
+                      :color="getResultColor(selectedGame)"
+                      small
+                      class="mt-1"
+                    >
+                      {{ getResultText(selectedGame) }}
+                    </v-chip>
                   </v-list-item-subtitle>
                 </v-list-item-content>
               </v-list-item>
@@ -245,7 +255,7 @@ export default {
       playerSymbolInGame: 'x',
       headers: [
         { text: 'Type', value: 'game_type' },
-        { text: 'Result', value: 'winner' },
+        { text: 'Result', value: 'result' },
         { text: 'Date', value: 'created_at' },
         { text: 'Actions', value: 'actions', sortable: false }
       ]
@@ -273,17 +283,46 @@ export default {
       this.error = '';
       
       try {
-        // Use the parent component's gameService to get data
-        // If this doesn't work, we'll need to adjust how we access the gameService
-        if (this.$parent && this.$parent.gameService) {
-          const data = await this.$parent.gameService.getGameHistory();
+        // Direct fetch using the API URL from props
+        const response = await fetch(`${this.gameHistoryApiUrl}/games`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        // If API returns an error response, check if it's 404 (no games yet)
+        if (!response.ok) {
+          if (response.status === 404) {
+            // No games yet, not an error
+            this.games = [];
+          } else {
+            console.error(`Game history API error: ${response.status}`);
+            this.error = `Failed to fetch game history: ${response.statusText}`;
+          }
+          return;
+        }
+        
+        // Get the raw text
+        const responseText = await response.text();
+        
+        // If response is empty
+        if (!responseText.trim()) {
+          this.games = [];
+          return;
+        }
+        
+        // Try to parse the JSON
+        try {
+          const data = JSON.parse(responseText);
           
-          if (!data || !data.games) {
+          if (!data || !data.games || !Array.isArray(data.games)) {
+            console.error("Invalid data format:", data);
             this.games = [];
             return;
           }
           
-          // Process the games to ensure the data structure is correct
+          console.log("Game history data:", data.games);
+          
+          // Process the games
           this.games = data.games.map(game => {
             // Ensure the board is always an array of 9 items
             if (!Array.isArray(game.board) || game.board.length !== 9) {
@@ -297,57 +336,15 @@ export default {
             
             return game;
           });
-        } else {
-          // Direct fetch if gameService is not available
-          const response = await fetch(`${this.gameHistoryApiUrl}/games`, {
-            method: 'GET',
-            credentials: 'include'
-          });
-          
-          // If we get a 404 or any error, just show empty state
-          if (!response.ok) {
-            this.games = [];
-            return;
-          }
-          
-          const responseText = await response.text();
-          
-          // If response is empty, return empty array
-          if (!responseText.trim()) {
-            this.games = [];
-            return;
-          }
-          
-          try {
-            const data = JSON.parse(responseText);
-            
-            if (!data || !data.games || !Array.isArray(data.games)) {
-              this.games = [];
-              return;
-            }
-            
-            // Process the games
-            this.games = data.games.map(game => {
-              // Ensure the board is always an array of 9 items
-              if (!Array.isArray(game.board) || game.board.length !== 9) {
-                game.board = Array(9).fill('');
-              }
-              
-              // Normalize the moves array
-              if (!Array.isArray(game.moves)) {
-                game.moves = [];
-              }
-              
-              return game;
-            });
-          } catch (parseError) {
-            console.error('Error parsing JSON:', parseError);
-            this.games = [];
-          }
+        } catch (parseError) {
+          console.error('Error parsing JSON:', parseError);
+          console.log('Raw response:', responseText);
+          this.error = 'Error parsing game history data';
+          this.games = [];
         }
       } catch (error) {
         console.error('Error fetching game history:', error);
-        // Don't set error message - just show empty games
+        this.error = error.message || 'Failed to fetch game history';
         this.games = [];
       } finally {
         this.loading = false;
@@ -378,6 +375,34 @@ export default {
       
       // Initialize replay
       this.initializeReplay();
+    },
+    
+    getResultColor(game) {
+      if (!game) return 'info';
+      
+      if (game.result === 'win') {
+        return 'success';
+      } else if (game.result === 'loss') {
+        return 'error';
+      } else if (game.result === 'draw') {
+        return 'info';
+      } else {
+        return 'warning';
+      }
+    },
+    
+    getResultText(game) {
+      if (!game) return '';
+      
+      if (game.result === 'win') {
+        return 'Victory';
+      } else if (game.result === 'loss') {
+        return 'Defeat';
+      } else if (game.result === 'draw') {
+        return 'Draw';
+      } else {
+        return 'Unknown';
+      }
     },
     
     initializeReplay() {
