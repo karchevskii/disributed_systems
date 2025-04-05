@@ -113,7 +113,9 @@ async def get_games_history(
 
         if game.winner == "draw":
             game_dto.result = "draw"
-        elif game.winner == user["id"]:
+        elif game.winner == "x" and game.player_x_id == user["id"]:
+            game_dto.result = "win"
+        elif game.winner == "o" and game.player_o_id == user["id"]:
             game_dto.result = "win"
         else:
             game_dto.result = "loss"
