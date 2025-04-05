@@ -251,8 +251,6 @@ class GameService {
     }
   }
   
-  // Add these additional methods
-  
   // Check if socket connection is active
   isSocketConnected() {
     return this.socket && this.socket.readyState === WebSocket.OPEN;
