@@ -56,21 +56,9 @@
               </v-chip>
             </span>
             <span v-else>
-              <!-- Fallback for compatibility with old format -->
-              <span v-if="item.winner === 'draw'">Draw</span>
-              <v-chip
-                v-else-if="item.winner === userId || (item.winner === 'o' && item.player_o_id === userId) || (item.winner === 'x' && item.player_x_id === userId)"
-                color="success"
-                x-small
-              >
-                Victory
-              </v-chip>
-              <v-chip
-                v-else
-                color="error"
-                x-small
-              >
-                Defeat
+              <!-- Fallback if result field isn't present -->
+              <v-chip color="warning" x-small>
+                {{ item.winner === userId ? 'Win' : item.winner === 'draw' ? 'Draw' : 'Loss' }}
               </v-chip>
             </span>
           </template>
@@ -346,18 +334,6 @@ export default {
               game.moves = [];
             }
             
-            // If game doesn't have a result field, determine it from the winner field
-            if (!game.result) {
-              if (game.winner === 'draw') {
-                game.result = 'draw';
-              } else if ((game.winner === 'x' && game.player_x_id === this.userId) || 
-                         (game.winner === 'o' && game.player_o_id === this.userId)) {
-                game.result = 'win';
-              } else {
-                game.result = 'loss';
-              }
-            }
-            
             return game;
           });
         } catch (parseError) {
@@ -411,15 +387,7 @@ export default {
       } else if (game.result === 'draw') {
         return 'info';
       } else {
-        // Legacy format fallback
-        if (game.winner === 'draw') {
-          return 'info';
-        } else if ((game.winner === 'x' && game.player_x_id === this.userId) || 
-                  (game.winner === 'o' && game.player_o_id === this.userId)) {
-          return 'success';
-        } else {
-          return 'error';
-        }
+        return 'warning';
       }
     },
     
@@ -433,15 +401,7 @@ export default {
       } else if (game.result === 'draw') {
         return 'Draw';
       } else {
-        // Legacy format fallback
-        if (game.winner === 'draw') {
-          return 'Draw';
-        } else if ((game.winner === 'x' && game.player_x_id === this.userId) || 
-                  (game.winner === 'o' && game.player_o_id === this.userId)) {
-          return 'Victory';
-        } else {
-          return 'Defeat';
-        }
+        return 'Unknown';
       }
     },
     
