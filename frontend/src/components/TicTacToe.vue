@@ -648,6 +648,20 @@ export default {
             message: data.message
           });
         }
+      } else if (data.type === 'player_disconnected') {
+        // Handle player disconnection
+        const disconnectedSymbol = data.player.toUpperCase();
+        if (disconnectedSymbol !== this.playerSymbol) {
+          // Only show notification if it's the opponent who disconnected
+          this.showNotification(`Your opponent (${disconnectedSymbol}) has disconnected from the game.`, 'warning');
+        }
+      } else if (data.type === 'player_connected') {
+        // Handle player reconnection
+        const connectedSymbol = data.player.toUpperCase();
+        if (connectedSymbol !== this.playerSymbol) {
+          // Only show notification if it's the opponent who reconnected
+          this.showNotification(`Your opponent (${connectedSymbol}) has rejoined the game.`, 'success');
+        }
       } else if (data.type === 'error') {
         this.showNotification(data.message, 'error');
       }
