@@ -118,12 +118,22 @@ class GameService {
         credentials: 'include'
       });
       
+      // If we get a 404, it means there are no games yet (not an error)
+      if (response.status === 404) {
+        return { games: [] };
+      }
+      
       if (!response.ok) {
         throw new Error('Failed to get game history: ' + response.statusText);
       }
       
       // Get the raw text first
       const responseText = await response.text();
+      
+      // If response is empty, return empty array
+      if (!responseText.trim()) {
+        return { games: [] };
+      }
       
       // Try to parse the JSON
       try {
@@ -140,7 +150,8 @@ class GameService {
       }
     } catch (error) {
       console.error('Error in getGameHistory:', error);
-      throw error;
+      // Return empty games array instead of throwing error
+      return { games: [] };
     }
   }
 

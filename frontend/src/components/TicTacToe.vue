@@ -116,22 +116,23 @@
                 <!-- Game Info - Simplified based on game mode -->
                 <div class="d-flex justify-space-between align-center mb-3">
                   <div>
-                    <!-- Only show game code for human multiplayer games -->
-                    <v-chip v-if="gameMode === 'human'" color="success" small>
-                      Game #{{ gameCode }}
-                    </v-chip>
-                    
                     <!-- Opponent icon (Human/Bot) -->
-                    <v-chip :color="gameMode === 'bot' ? 'info' : 'warning'" x-small>
-                      <v-icon left x-small>{{ gameMode === 'bot' ? 'mdi-robot' : 'mdi-account' }}</v-icon>
-                      {{ gameMode === 'bot' ? 'Bot' : 'Human' }}
+                    <v-chip :color="gameMode === 'bot' ? 'info' : 'warning'" small>
+                      <v-icon left small>{{ gameMode === 'bot' ? 'mdi-robot' : 'mdi-account' }}</v-icon>
+                      {{ gameMode === 'bot' ? 'Bot' : 'Multiplayer' }}
                     </v-chip>
                   </div>
                   
-                  <!-- Only show invite link option for human multiplayer games -->
-                  <v-btn v-if="gameMode === 'human'" x-small text color="primary" @click="copyGameLink">
-                    <v-icon x-small left>mdi-content-copy</v-icon>
-                    Copy Invite Link
+                  <!-- For multiplayer games, show copy ID button -->
+                  <v-btn 
+                    v-if="gameMode === 'human'"
+                    small
+                    outlined
+                    color="primary"
+                    @click="copyGameId"
+                  >
+                    <v-icon left small>mdi-content-copy</v-icon>
+                    Copy Game ID
                   </v-btn>
                 </div>
                 
@@ -379,8 +380,9 @@ export default {
         // Determine user type and username
         if (userData.email && userData.email.includes('@guest.')) {
           this.userType = 'guest';
-          // For guests, use the part of the email before @
-          this.username = userData.email.split('@')[0] || 'Guest';
+          // For guests, use a shorter name format: Guest + last 4 chars of ID
+          const shortId = userData.id.substring(userData.id.length - 4);
+          this.username = `Guest${shortId}`;
         } else {
           // GitHub user
           this.userType = 'github';
@@ -547,7 +549,7 @@ export default {
         
         // If multiplayer game, show the invite message
         if (this.gameMode === 'human') {
-          this.showNotification(`Game created! Share the Game ID: ${gameData.id} with a friend.`, 'success');
+          this.showNotification(`Game created! Use the Copy Game ID button to share with a friend.`, 'success');
         } else {
           this.showNotification('Game against bot started!', 'success');
         }
@@ -716,6 +718,18 @@ export default {
       navigator.clipboard.writeText(this.inviteLink)
         .then(() => {
           this.showNotification('Invite link copied to clipboard!', 'success');
+        })
+        .catch(err => {
+          console.error('Could not copy text: ', err);
+        });
+    },
+    
+    copyGameId() {
+      if (!this.gameCode) return;
+      
+      navigator.clipboard.writeText(this.gameCode)
+        .then(() => {
+          this.showNotification('Game ID copied to clipboard!', 'success');
         })
         .catch(err => {
           console.error('Could not copy text: ', err);
