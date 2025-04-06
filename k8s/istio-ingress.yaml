@@ -1,0 +1,81 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: tictactoe-gateway
+  namespace: tictactoe
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - tictactoe.local
+        - metrics.tictactoe.local
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: tictactoe-virtualservice
+  namespace: tictactoe
+spec:
+  hosts:
+    - tictactoe.local
+  gateways:
+    - tictactoe-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /users-service
+      route:
+        - destination:
+            host: users
+            port:
+              number: 8000
+    - match:
+        - uri:
+            prefix: /game-service
+      route:
+        - destination:
+            host: game
+            port:
+              number: 8000
+    - match:
+        - uri:
+            prefix: /history-service
+      route:
+        - destination:
+            host: game-history
+            port:
+              number: 8000
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: frontend
+            port:
+              number: 80
+---
+# Addon routes
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: istio-addons-vs
+  namespace: istio-system
+spec:
+  hosts:
+    - metrics.tictactoe.local
+  gateways:
+    - tictactoe/tictactoe-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: kiali
+            port:
+              number: 20001

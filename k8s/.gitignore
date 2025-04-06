@@ -2,5 +2,7 @@
 !example-*
 istio*
 !istio.sh
+!istio-ingress.yaml
 !istio-cleanup.sh
 *.pem
+origin-ca-key.yaml

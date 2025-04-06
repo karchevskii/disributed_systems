@@ -1,5 +1,37 @@
 # Distributed Tictactoe
 
+## 0. Deployment: Lokal
+
+Minikube und kubectl sind Voraussetzung für den lokalen Betrieb. Die Anwendung ist als Kubernetes-Deployment konzipiert und kann lokal mit Minikube betrieben werden.
+
+### 0.1 Minikube starten
+
+```bash
+minikube start --driver=docker --cpus=5 --memory=8000 
+kubectl config use-context minikube
+```
+### 0.2 Secrets erstellen
+
+Die Dateien example-postgres-game-history-secret.yaml, example-postgres-users-secret.yaml, example-redis-secret.yaml und example-users-secret.yaml sind zu kopieren, umbenennen entsprechend in postgres-game-history-secret.yaml, postgres-users-secret.yaml, redis-secret.yaml und users-secret.yaml und mit eigenen Secrets zu füllen (Datenbank-Usernames nicht ändern!). Diese Dateien sind im Ordner `k8s` zu finden. Die Secrets sind notwendig, um die Datenbankverbindungen und andere sensible Informationen zu schützen.
+
+### 0.3 Script ausführen
+
+```bash
+cd ./k8s
+./istio.sh
+```
+Dabei wird Istio installiert und die Kubernetes-Ressourcen für die Anwendung bereitgestellt. Das Skript konfiguriert auch das Istio Ingress Gateway, um den Zugriff auf die Anwendung zu ermöglichen. Es wird ein Minikube Tunnel gestartet, um den Zugriff auf die Anwendung zu ermöglichen. Die Anwendung ist dann unter `http://tictactoe.local` erreichbar. Die Metriken sind unter `http://metrics.tictactoe.local` verfügbar. Man speichert die URL in der `/etc/hosts`-Datei, um den Zugriff zu ermöglichen: 
+
+```bash
+echo 127.0.0.1       tictactoe.local metrics.tictactoe.local >> /etc/hosts
+```
+Man muss warten, bis alle Pods im Status `Running` sind. Dies kann man mit dem folgenden Befehl überprüfen:
+
+```bash
+kubectl get all --namespace tictactoe
+```
+Um die Ressourcen zu löschen, kann das Skript `./istio-cleanup.sh` ausgeführt werden. Dies entfernt alle Ressourcen, die im Skript `istio.sh` erstellt wurden.
+
 ## 1. Architektur
 
 Die verteilte Web-Applikation „Distributed Tictactoe“ ist als moderne Microservice-basierte Anwendung konzipiert, welche vollständig containerisiert in einem Kubernetes-Cluster betrieben wird. Ziel der Architektur ist eine hohe Skalierbarkeit, Ausfallsicherheit sowie die Unterstützung von Echtzeitkommunikation für ein reibungsloses Spielerlebnis.

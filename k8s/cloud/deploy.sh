@@ -1,11 +1,12 @@
 # Namespace
 kubectl apply -f namespace.yaml
 
-kubectl create secret tls cloudflare-origin-cert --key=./origin-private-key.pem --cert=./origin-cert.pem -n tictactoe
+curl -O https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem
+kubectl create secret -n tictactoe generic cloudflare-tls-secret --from-file=ca.crt=./authenticated_origin_pull_ca.pem
+kubectl create secret -n tictactoe tls cloudflare-origin-server --key origin-private-key.pem --cert origin-cert.pem   
 
 kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.25/releases/cnpg-1.25.1.yaml
 sleep 25
-
 
 # Secrets
 kubectl apply -f redis-secret.yaml
