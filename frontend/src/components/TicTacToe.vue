@@ -267,7 +267,8 @@ export default {
       username: '',
       userId: null,
       userEmail: '',
-      
+      status: 'waiting',
+
       // Game state
       inGame: false,
       gameCode: null,
@@ -317,6 +318,11 @@ export default {
       // If we have custom status text, use that
       if (this.gameStatusText) {
         return this.gameStatusText;
+      }
+      
+      // Special case for multiplayer games in "waiting" status
+      if (this.gameMode === 'human' && this.status === 'waiting') {
+        return 'Waiting for opponent to join...';
       }
       
       if (this.gameOver) {
@@ -624,6 +630,15 @@ export default {
         // Update the game state
         const gameData = data.game;
         
+        // Update game status and show notification if needed
+        const previousStatus = this.status;
+        this.status = gameData.status;
+        
+        // Show notification when game becomes active (opponent joined)
+        if (previousStatus === 'waiting' && gameData.status === 'active' && this.gameMode === 'human') {
+          this.showNotification('Opponent has joined! Game is starting.', 'success');
+        }
+
         // Update the board
         // Convert backend's flat array to frontend's 2D array
         for (let i = 0; i < 3; i++) {
