@@ -98,6 +98,7 @@ async def get_current_user(request: Request):
 
 class ConnectionManager:
     def __init__(self):
+        # Local in-memory connections for direct WebSocket access
         # {game_id: {player_id: WebSocket}}
         self.active_connections: Dict[str, Dict[str, WebSocket]] = {}
 
@@ -126,6 +127,10 @@ class ConnectionManager:
         if game_id not in self.active_connections:
             self.active_connections[game_id] = {}
         self.active_connections[game_id][player_id] = websocket
+        
+        # Also track this connection in Redis
+        # Store the instance ID so we know where this player is connected
+        redis_client.hset(f"connections:{game_id}", player_id, self.instance_id)
 
         # Ensure tasks are started when first connection happens
         if self.polling_task is None or self.polling_task.done():
@@ -178,6 +183,13 @@ class ConnectionManager:
             if not self.active_connections[game_id]:  # If empty
                 del self.active_connections[game_id]
 
+        # Remove from Redis tracking
+        redis_client.hdel(f"connections:{game_id}", player_id)
+        
+        # If no players left in this game, clean up
+        if redis_client.hlen(f"connections:{game_id}") == 0:
+            redis_client.delete(f"connections:{game_id}")
+        
         # Stop tasks if no more connections
         if not self.active_connections:
             if self.polling_task:
@@ -229,7 +241,7 @@ class ConnectionManager:
                         logger.error(
                             f"Error broadcasting to player {player_id}: {e}")
 
-        # Then, publish to Redis for other instances
+        # Then, publish to Redis for other instances to broadcast to their connections
         redis_message = {
             'instance_id': self.instance_id,
             'game_id': game_id,
@@ -239,8 +251,7 @@ class ConnectionManager:
 
         # Use the global redis client for publishing
         try:
-            redis_client.publish('websocket_broadcasts',
-                                 json.dumps(redis_message))
+            redis_client.publish('websocket_broadcasts', json.dumps(redis_message))
         except Exception as e:
             logger.error(f"Error publishing broadcast to Redis: {e}")
 
@@ -248,9 +259,12 @@ class ConnectionManager:
         """Monitor active connections and handle timeouts"""
         while True:
             try:
-                games_to_check = list(self.active_connections.keys())
-
-                for game_id in games_to_check:
+                # Get all games with active connections from Redis
+                all_connection_keys = redis_client.keys("connections:*")
+                
+                for conn_key in all_connection_keys:
+                    game_id = conn_key.split(":", 1)[1]
+                    
                     # Get game data
                     game_data_str = redis_client.get(f"game:{game_id}")
                     if not game_data_str:
@@ -261,11 +275,13 @@ class ConnectionManager:
                     # Only monitor active multiplayer games
                     if game_data["status"] != "active" or game_data["type"] != "multiplayer":
                         continue
-
-                    # Check if we should have two players but only one is connected
-                    players = list(self.active_connections[game_id].keys())
-                    if len(players) == 1 and game_data["players"]["x"] and game_data["players"]["o"]:
-                        connected_player_id = players[0]
+                    
+                    # Get all active connections for this game
+                    connected_players = redis_client.hkeys(f"connections:{game_id}")
+                    
+                    # Check if we should have two players but not all are connected
+                    if len(connected_players) == 1 and game_data["players"]["x"] and game_data["players"]["o"]:
+                        connected_player_id = connected_players[0]
 
                         # Determine the disconnected player and symbols
                         disconnected_player_id = None
