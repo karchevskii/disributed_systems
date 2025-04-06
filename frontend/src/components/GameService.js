@@ -1,10 +1,10 @@
 class GameService {
   constructor(apiBaseUrl, gameApiUrl, onSocketMessage, onError) {
     // Use environment variables with fallbacks
-    this.apiBaseUrl = process.env.VUE_APP_USERS_SERVICE_URL || apiBaseUrl || 'http://tictactoe.local/users-service';
-    this.gameApiUrl = process.env.VUE_APP_GAME_SERVICE_URL || gameApiUrl || 'http://tictactoe.local/game-service';
-    this.gameHistoryApiUrl = process.env.VUE_APP_HISTORY_SERVICE_URL || 'http://tictactoe.local/history-service';
-    this.wsHost = process.env.VUE_APP_WS_HOST || 'tictactoe.local/game-service';
+    this.apiBaseUrl = process.env.VUE_APP_USERS_SERVICE_URL ;
+    this.gameApiUrl = process.env.VUE_APP_GAME_SERVICE_URL;
+    this.gameHistoryApiUrl = process.env.VUE_APP_HISTORY_SERVICE_URL;
+    this.wsHost = process.env.VUE_APP_WS_HOST;
     
     this.onSocketMessage = onSocketMessage;
     this.onError = onError;
