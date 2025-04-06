@@ -410,34 +410,51 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
 
     try:
         # Notify all connected players that a new player has connected
-        await manager.broadcast(
-            {"type": "player_connected", "player": player_symbol},
-            game_id
+        await manager.send_personal_message(
+            {"type": "connection_status", "status": "connected", "symbol": player_symbol},
+            game_id, 
+            user["id"]
         )
 
+        # And notify other players differently:
+        for player_id in manager.active_connections.get(game_id, {}):
+            if player_id != user["id"]:
+                await manager.send_personal_message(
+                    {"type": "player_connected", "player": player_symbol},
+                    game_id,
+                    player_id
+                )
+
         # Initial game state
-        await manager.broadcast({
+        await websocket.send_json({
             "type": "game_state",
             "game": game_data
-        }, game_id)
-        logger.debug(f"Sent initial game state")
+        })
+        logger.info(f"Sent initial game state to user {user["id"]}")
 
         # Multiplayer game loop
         if game_data["type"] == "multiplayer":
-            logger.debug("Starting multiplayer game loop")
+            logger.info("Starting multiplayer game loop")
             while True:
                 data = await websocket.receive_json()
 
                 # Handle different message types
                 if data["type"] == "move":
                     # Get fresh game state from Redis
-                    game_data_str = redis_client.get(f"game:{game_id}")
-                    if not game_data_str:
-                        await websocket.send_json({
-                            "type": "error",
-                            "message": "Game not found"
-                        })
-                        continue
+                    fresh_game_data_str = redis_client.get(f"game:{game_id}")
+                    if fresh_game_data_str:
+                        fresh_game_data = json.loads(fresh_game_data_str)
+                        # Only send if the game is actually active
+                        if fresh_game_data["status"] == "active":
+                            await websocket.send_json({
+                                "type": "game_state",
+                                "game": fresh_game_data
+                            })
+                        else:
+                            await websocket.send_json({
+                                "type": "error",
+                                "message": "Game is not active yet"
+                            })
 
                     game_data = json.loads(game_data_str)
 
@@ -918,12 +935,19 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     # Join as another player
     if game_data["players"]["x"] is None:
         game_data["players"]["x"] = user["id"]
-        game_data["current_player"] = game_data["players"]["x"]
+        game_data["current_player"] = user["id"]  # Player X starts
     else:  # Must be joining as player "o"
         game_data["players"]["o"] = user["id"]
-        num_moves = len(game_data["moves"])
-        if num_moves % 2 != 0:
-            game_data["current_player"] = game_data["players"]["o"]
+        # Make sure current_player is properly set based on the game state
+        if not game_data["moves"]:
+            # If no moves yet, X should start
+            game_data["current_player"] = game_data["players"]["x"]
+        elif len(game_data["moves"]) % 2 == 1:
+            # If odd number of moves, it's O's turn
+            game_data["current_player"] = user["id"]
+        else:
+            # If even number of moves, it's X's turn
+            game_data["current_player"] = game_data["players"]["x"]
 
     # Set game to active now that both players are joined
     game_data["status"] = "active"
