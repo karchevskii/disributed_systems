@@ -456,7 +456,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                                 "message": "Game is not active yet"
                             })
 
-                    game_data = json.loads(game_data_str)
+                    game_data = json.loads(fresh_game_data_str)
 
                     # Check if it's this player's turn
                     if game_data["current_player"] != user["id"]:
