@@ -19,30 +19,87 @@ Die Applikation basiert auf einer **Microservice-Architektur**, ausgeführt in e
 ### 1.1 Systemkomponenten und Interaktion
 
 ```mermaid
-graph TD;
+graph TD
   subgraph Client
     A[Browser / Frontend Vue.js]
   end
 
-  subgraph Kubernetes Cluster
-    B[Ingress / Istio Gateway]
-    C[Users Service]
-    D[Game Service]
-    E[Game History Service]
-    R[Redis Cluster]
-    P1[(PostgreSQL Cluster)]
-    P2[(PostgreSQL Cluster)]
-  end
+  subgraph "Kubernetes Cluster"
+    subgraph "Istio Service Mesh"
+      B[Ingress Gateway]
+      
+      subgraph "Users Service Pod"
+        C[Users Service]
+        CP[Envoy Proxy Sidecar]
+      end
+      
+      subgraph "Game Service Pod"
+        D[Game Service]
+        DP[Envoy Proxy Sidecar]
+      end
+      
+      subgraph "Game History Pod"
+        E[Game History Service]
+        EP[Envoy Proxy Sidecar]
+      end
 
+      subgraph "Control Plane"
+        IC[Istiod]
+      end
+      
+      subgraph "Observability Stack"
+        PR[Prometheus]
+        GR[Grafana]
+        KI[Kiali]
+        JA[Jaeger]
+      end
+    end
+    
+    subgraph "Data Layer"
+      R[(Redis Cluster)]
+      P1[(PostgreSQL - Game History)]
+      P2[(PostgreSQL - Users)]
+    end
+  end
+  
+  %% Client to Gateway connections
   A -->|HTTP+WebSocket| B
-  B --> C
-  B --> D
-  B --> E
-  D <--> R
-  E --> P1
-  C --> P2
+  
+  %% Control Plane connections
+  IC -.->|Config| CP
+  IC -.->|Config| DP
+  IC -.->|Config| EP
+  IC -.->|Config| B
+  
+  %% Gateway to services
+  B -->|HTTP| CP
+  B -->|HTTP+WebSocket| DP
+  B -->|HTTP| EP
+  
+  %% Service to sidecar to service communication
+  CP --> C
+  DP --> D
+  EP --> E
+  
+  %% Data connections
+  D <-->|Cache+State| R
+  E -->|Store| P1
+  C -->|Store| P2
   D -->|Stream Events| R
   E -->|Stream Consumer| R
+  
+  %% Observability connections
+  CP -.->|Metrics+Traces| PR
+  DP -.->|Metrics+Traces| PR
+  EP -.->|Metrics+Traces| PR
+  B -.->|Metrics+Traces| PR
+  PR -->|Data| GR
+  PR -->|Data| KI
+  CP -.->|Traces| JA
+  DP -.->|Traces| JA
+  EP -.->|Traces| JA
+  B -.->|Traces| JA
+  KI -->|Visualization| GR
 ```
 
 ### 1.2 Anforderungen
@@ -87,8 +144,10 @@ graph TD;
 
   - FastAPI + OAuth2.0 (GitHub)
   - JWT in HTTP-only Cookies
-  - Validierung durch andere Services via `/validate`
+  - Validierung durch andere Services via `/users/me` (gibt 401 zurück, wenn Token nicht gültig)
   - Datenhaltung in PostgreSQL
+  - Nutzung von SQLAlchemy für Objekt-Relational-Mapping
+  - Nutzung von Alembic für Migrationen
 
 - **Game-Service**
 
