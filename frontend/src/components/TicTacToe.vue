@@ -636,15 +636,19 @@ export default {
         // Update the game state
         const gameData = data.game;
         
-        // Update game status
+        // Store previous status before updating it
         const previousStatus = this.status;
+        
+        // Update status right away
         this.status = gameData.status;
         
         // Show notification when a player has joined (only for the game creator)
-        // Only show this if we're the creator, not the joiner
         if (previousStatus === 'waiting' && gameData.status === 'active' && 
             this.gameMode === 'human' && gameData.created_by === this.userId) {
-          this.showNotification('Opponent has joined! Game is starting.', 'success');
+          // Use a very small timeout to ensure the notification shows at the right time
+          setTimeout(() => {
+            this.showNotification('Opponent has joined! Game is starting.', 'success');
+          }, 50);
         }
         
         // Update the board
@@ -679,7 +683,18 @@ export default {
         
         // Update game status display
         this.updateGameStatusDisplay(gameData);
-      } else if (data.type === 'chat') {
+      } 
+      // Handle player connected event explicitly
+      else if (data.type === 'player_connected') {
+        console.log('Player connected event received', data);
+        
+        // If we're the creator, show notification
+        if (this.gameMode === 'human' && this.status === 'waiting') {
+          this.status = 'active'; // Immediately update status
+          this.showNotification('Opponent has joined! Game is starting.', 'success');
+        }
+      }
+      else if (data.type === 'chat') {
         // Handle chat messages
         if (this.$refs.gameChat) {
           this.$refs.gameChat.addMessage({
