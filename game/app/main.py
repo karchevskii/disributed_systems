@@ -455,6 +455,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                                 "type": "error",
                                 "message": "Game is not active yet"
                             })
+                            continue
 
                     game_data = json.loads(fresh_game_data_str)
 
