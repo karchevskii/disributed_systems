@@ -11,6 +11,22 @@ Die Services laufen innerhalb eines Kubernetes-Clusters. Als Service Mesh kommt 
 
 Ein Istio Ingress Gateway dient als zentraler Einstiegspunkt in das System. Über definierte `VirtualServices` wird der eingehende Datenverkehr zu den jeweiligen Services weitergeleitet.
 
+**Funktionale Anforderungen:**
+
+- Registrierung/Login via GitHub (OAuth2.0)
+- Gast-Login
+- Matchmaking (Bot/Multiplayer)
+- Spielverlauf in Echtzeit
+- Speicherung und Abfrage gespielter Spiele
+
+**Nichtfunktionale Anforderungen:**
+
+- Horizontale Skalierung
+- Echtzeitfähigkeit (WebSocket)
+- Fehlertoleranz (Redis Streams, mehrere Instanzen)
+- Trennung von Zuständigkeiten
+- Wartbarkeit & Erweiterbarkeit
+
 
 ### 1.2 Systemkomponenten und Interaktion
 
@@ -140,25 +156,6 @@ CloudNativePG bietet folgende Vorteile:
 
 Diese Architektur folgt dem Prinzip verteilter, fehlertoleranter Speichersysteme, wie sie auch von Tanenbaum beschrieben werden: „Distributed databases must cope with replication, partitioning and fault-tolerance[...]“ [1, Kapitel 7].
 
-
-### 1.2 Anforderungen
-
-**Funktionale Anforderungen:**
-
-- Registrierung/Login via GitHub (OAuth2.0)
-- Gast-Login
-- Matchmaking (Bot/Multiplayer)
-- Spielverlauf in Echtzeit
-- Speicherung und Abfrage gespielter Spiele
-
-**Nichtfunktionale Anforderungen:**
-
-- Horizontale Skalierung
-- Echtzeitfähigkeit (WebSocket)
-- Fehlertoleranz (Redis Streams, mehrere Instanzen)
-- Trennung von Zuständigkeiten
-- Wartbarkeit & Erweiterbarkeit
-
 ---
 
 ## 2. Umsetzung
@@ -168,9 +165,29 @@ Die technische Umsetzung orientiert sich eng an den definierten architektonische
 ### 2.1 Implementierung der Architektur
 
 #### 2.1.1 Backend-Services mit FastAPI
-Alle Backend-Microservices wurden in FastAPI umgesetzt, einem modernen Python-Webframework mit automatischer OpenAPI-Generierung und hervorragender Performance. Die Services nutzen Pydantic für Typisierung und Validierung sowie JWT für Authentifizierung. Die getrennte Entwicklung jedes Dienstes ermöglichte eine klare fachliche und technische Abgrenzung.
+Alle Backend-Microservices wurden in FastAPI umgesetzt, einem modernen Python-Webframework mit automatischer OpenAPI-Generierung und hervorragender Performance. Die Services nutzen Pydantic für Typisierung und Validierung sowie JWT für Authentifizierung. Die Servies, die eine Datenbank benötigen, verwenden SQLAlchemy für das ORM und Alembic für Migrationen. FastAPI ermöglicht eine einfache Integration von WebSockets, was für den Echtzeit-Spielbetrieb entscheidend ist. Die getrennte Entwicklung jedes Dienstes ermöglichte eine klare fachliche und technische Abgrenzung.
 
+**Users-Service**
+  - FastAPI + OAuth2.0 (GitHub)
+  - JWT in HTTP-only Cookies
+  - Validierung durch andere Services via `/users/me` (gibt 401 zurück, wenn Token nicht gültig)
+  - Datenhaltung in PostgreSQL
+  - Nutzung von SQLAlchemy für Objekt-Relational-Mapping
+  - Nutzung von Alembic für Migrationen
 
+**Game-Service**
+  - FastAPI + WebSockets
+  - Game-Logik, Spielstart, Spielzug
+  - Zustandsdaten in Redis
+  - Spielende als Event in Redis Stream
+
+- **Game History-Service**
+    - Redis Stream Consumer (Consumer Group)
+    - Speicherung von Spieldaten in PostgreSQL
+    - REST-API zur Abfrage
+    - Nutzung von SQLAlchemy für Objekt-Relational-Mapping
+    - Nutzung von Alembic für Migrationen
+    - Speicherung der Spieldaten in PostgreSQL
 
 #### 2.1.2 Websockets für Echtzeit-Spielbetrieb
 Die Kommunikation beim Spiel erfolgt über WebSockets, da diese eine permanente bidirektionale Verbindung zwischen Client und Server ermöglichen. Im Gegensatz zu HTTP-Polling oder Long-Polling reduziert WebSocket die Latenz signifikant – ein entscheidender Faktor für eine flüssige Spielerfahrung [1].
@@ -200,102 +217,77 @@ Das Service Mesh abstrahiert die Netzwerklogik von den Applikationen und erlaubt
 
 #### 2.1.6 CI mit GitHub Actions
 Die Continuous Integration Pipeline wurde mit GitHub Actions implementiert. Folgende Schritte sind Teil des Workflows:
-- Detectieren von Code-Änderungen
+- Detektieren von Code-Änderungen
 - Bauen der Container-Images
 - Pushen der Images zu Docker Hub
 
-#### Backend-Services
-
-- **Users-Service**
-
-  - FastAPI + OAuth2.0 (GitHub)
-  - JWT in HTTP-only Cookies
-  - Validierung durch andere Services via `/users/me` (gibt 401 zurück, wenn Token nicht gültig)
-  - Datenhaltung in PostgreSQL
-  - Nutzung von SQLAlchemy für Objekt-Relational-Mapping
-  - Nutzung von Alembic für Migrationen
-
-- **Game-Service**
-
-  - FastAPI + WebSockets
-  - Game-Logik, Spielstart, Spielzug
-  - Zustandsdaten in Redis (Hash)
-  - Spielende als Event in Redis Stream
-
-- **Game History-Service**
-  - Redis Stream Consumer (Consumer Group)
-  - Speicherung von Spieldaten in PostgreSQL
-  - REST-API zur Abfrage
-
-#### WebSocket & Redis
-
-- WebSocket für Spielkommunikation (`/ws/play`)
-- Redis:
-  - Spielstatus (Hash)
-  - Events (`stream.games.finished`)
-  - Skalierbarkeit über Cluster & In-Memory Performance [2]
-
-#### Authentifizierung
-
-- GitHub OAuth2.0 Authorization Code Flow
-- Public User Profile via GitHub API
-- Abspeicherung von Session-Token im Cookie
-
-#### Kubernetes & Istio
-
-- Minikube für lokale Entwicklung
-- Deployments mit Helm
-- Istio:
-  - TLS, Routing, Circuit Breaking, WebSocket-Handling
-  - Prometheus + Grafana Integration
-
-#### CI/CD
-
-- GitHub Actions (Lint, Build, Test, Deploy)
-- Docker Hub für Container-Images
-- Helm für Umgebungsmanagement
-- Kubernetes Secrets für Konfiguration
 
 ### 2.2 Herausforderungen und Lösungen
+Die Umsetzung des Projekts brachte einige Herausforderungen mit sich, die jedoch durch den Einsatz geeigneter Technologien und Architekturen gelöst werden konnten. Hier sind einige der wichtigsten Herausforderungen und deren Lösungen:
+#### 2.2.1 Zustandsverwaltung bei mehreren Instanzen
+**Problem**: Die Game-Services müssen bei mehreren Instanzen denselben Spielzustand kennen.
 
-| Herausforderung                              | Lösung                                                |
-| -------------------------------------------- | ----------------------------------------------------- |
-| Synchronisation Game-Instanzen               | Zentrale Redis-Zustandsverwaltung                     |
-| Token-Validierung zwischen Services          | Users-Service `/validate` API                         |
-| Fehlertoleranz bei Event-Verarbeitung        | Redis Streams + Consumer Group                        |
-| WebSocket-Kompatibilität mit Ingress & Istio | Anpassung der Istio Gateway + VirtualService Settings |
+**Lösung**: Zentralisierung der Zustände in Redis – so können alle Instanzen bei jedem Spielzug synchronisiert agieren.
+
+#### 2.2.2 Token-Validierung zwischen Services
+**Problem**: Andere Services müssen Authentifizierung überprüfen, ohne User-DB-Zugriff zu haben.
+
+**Lösung**: Der Users-Service bietet ein `/users/me`-Endpoint an. Dort wird der JWT überprüft, und falls gültig, die User-Objekt zurückgegeben. Dies ermöglicht eine zentrale Validierung des Tokens.
+
+#### 2.2.3 Fehlertoleranz bei Event-Verarbeitung
+**Problem**: Bei Ausfall des Game History-Services gehen Events verloren.
+
+**Lösung**: Redis Streams und Consumer Groups ermöglichen eine fehlertolerante Event-Verarbeitung. Der Game History-Service kann die Events asynchron verarbeiten und bei Bedarf erneut abspielen.
+
+#### 2.2.4 WebSocket-Routing hinter Ingress
+**Problem**: WebSocket-Kommunikation funktioniert nicht durch alle Proxies korrekt.
+
+**Lösung**: Nutzung von Istio Gateway mit expliziten WebSocket-Protokoll-Support im `VirtualService`. Zusätzlich wurden Timeouts und Header korrekt gesetzt.
 
 ---
 
 ## 3. Reflektion
+Das Projekt „Distributed Tictactoe“ ermöglichte einen umfassenden praktischen Einblick in den Aufbau und Betrieb verteilter Systeme auf Basis moderner Cloud-Native-Technologien. Die iterative Entwicklung und das Testen in Kubernetes-Umgebungen sowie die Einbindung eines echten Service Meshs führten zu einem produktionsnahen Ergebnis. Dennoch zeigten sich einige technische und konzeptionelle Herausforderungen, aus denen wichtige Erkenntnisse für zukünftige Projekte abgeleitet werden konnten.
 
 ### 3.1 Was würde man anders machen?
+#### 3.1.1 Service-Kommunikation stärker entkoppeln
+Die Authentifizierungsvalidierung durch direkte Anfragen anderer Services an den Users-Service führte zu einer gewissen Kopplung. In zukünftigen Projekten wäre der Einsatz eines JWT Public Key Signing Mechanismus (z. B. JWKs + RS256) sinnvoller. Damit könnten alle Services Tokens selbstständig validieren, ohne den Users-Service aufrufen zu müssen. Dies würde Latenz, Fehlertoleranz und Skalierbarkeit verbessern.
 
-- **JWT Self-Validation** via Public Key (JWK) → weniger Service-Abhängigkeiten
-- **Früheres Observability Setup** → bessere Debug-Möglichkeiten
-- **Frontend API-Abstraktionslayer** → bessere Testbarkeit und Flexibilität
-- **GitOps statt CI/CD-only** → ArgoCD/Flux für Infrastrukturpflege
+#### 3.1.2 Monitoring und Logging früher integrieren
+Ein vollständiges Observability-Setup (Logging, Tracing, Metriken) wurde erst spät im Projekt ergänzt. Eine frühzeitige Integration hätte die Fehlersuche, insbesondere bei WebSocket-Problemen, deutlich erleichtert. Tools wie OpenTelemetry oder Grafana Tempo könnten künftig bereits im MVP-Stadium eingebunden werden.
+
+#### 3.1.3 Frontend-Kommunikation abstrahieren
+Die enge Kopplung des Frontends an konkrete API-Endpunkte erschwerte Anpassungen der Schnittstellen. Künftig sollte ein API-Client Layer mit klaren Interfaces integriert werden, um die Testbarkeit und Austauschbarkeit von Schnittstellen zu erhöhen.
+
+#### 3.1.4Deployment-Vereinfachung mit GitOps
+Das manuelle Anstoßen von Deployments über CI/CD war zwar funktional, aber nicht optimal wartbar. Die Einführung von GitOps mit Tools wie ArgoCD oder Flux würde konsistenteres und auditierbares Deployment ermöglichen – ein wichtiger Aspekt in produktionsnahen Szenarien.
 
 ### 3.2 Größte Herausforderungen
 
 | Herausforderung        | Lösung                           |
 | ---------------------- | -------------------------------- |
-| Verteilte Zustände     | Redis-Zentralisierung            |
-| OAuth2-Testing lokal   | Mocks für GitHub-Login           |
-| Asynchrone Events      | Redis Streams + Retry            |
-| Echtzeit-Kommunikation | WebSockets mit korrektem Routing |
+| Verteilte Zustandsverwaltung (mehrere Game-Service-Instanzen) | Konsistenter, zentraler Speicher in Redis inkl. Locking-Mechanismen.|
+| Fehlertoleranz bei asynchroner Kommunikation   | Redis Streams + Consumer Groups für persistente Event-Verarbeitung.  |
+| WebSocket-Kompatibilität hinter Ingress/Istio      | Spezielle Konfigurationen im Istio Gateway mit WebSocket-Support. |
+| Testbarkeit von OAuth2.0-Login-Flows | Einsatz von Gast-Usern im lokalen Minikube mit Umgehung echter GitHub-Auth für lokale Entwicklung. |
+
+Diese Herausforderungen spiegeln klassische Probleme verteilter Systeme wider: Synchronisation, Zustandsverwaltung, Kommunikation, Ausfallsicherheit und Sicherheit. Das Projekt zeigte in der Praxis, wie sich durch Cloud-Native-Prinzipien – wie Zustandslosigkeit, zentrale Kommunikation, Containerisierung und Service Meshes – diese Aspekte lösungsorientiert adressieren lassen, ganz im Sinne der Prinzipien moderner verteilter Architekturen [1].
 
 ### Fazit
-
-Das Projekt zeigt, wie sich verteilte Systeme in einem modernen Cloud-Native-Stack umsetzen lassen. Die Einbindung von Kubernetes, Istio, Redis und PostgreSQL in einer Microservice-Architektur ermöglichte eine modulare, fehlertolerante und skalierbare Spiellogik. Die Verbindung von Theorie (z. B. nach Tanenbaum [1]) mit praktischer Umsetzung erlaubte es, tiefere Einblicke in die Herausforderungen verteilter Architekturen zu gewinnen.
+Die Implementierung von Distributed Tictactoe bot einen ganzheitlichen Einblick in die Entwicklung, den Betrieb und die Wartung einer modernen, verteilten Webapplikation. Die Anwendung demonstriert, wie sich klassische Konzepte aus der Theorie verteilter Systeme – wie sie z. B. bei Tanenbaum beschrieben werden – mit aktuellen Technologien wie Kubernetes, FastAPI, Redis und Istio praktisch umsetzen lassen. Auch wenn Verbesserungspotenziale bestehen, konnte ein funktionales, fehlertolerantes und modular skalierbares System aufgebaut werden, das sich für weitere Erweiterungen – z. B. Matchmaking, Ranglisten oder KI-Gegner – eignet.
 
 ---
 
 ## Literaturverzeichnis
 
 [1] A. S. Tanenbaum and M. van Steen, _Distributed Systems: Principles and Paradigms_, 2nd ed. Upper Saddle River, NJ, USA: Pearson, 2007.
+
 [2]  Istio Authors, “Istio Documentation,” [Online]. Available: https://istio.io/latest/docs/. [Accessed: 06-Apr-2025].
+
 [3] IETF, “The OAuth 2.0 Authorization Framework,” RFC 6749, Oct. 2012. [Online]. Available: https://tools.ietf.org/html/rfc6749  
+
 [4] Redis Authors, “Redis Streams,” [Online]. Available: https://redis.io/docs/data-types/streams/. [Accessed: 06-Apr-2025].
+
 [5] M. Fowler, “Event-Driven Architecture,” [Online]. Available: https://martinfowler.com/articles/201701-event-driven.html. [Accessed: 06-Apr-2025].
+
 [6] Redis Authors, “Redis – In-Memory Data Structure Store,” [Online]. Available: https://redis.io/. [Accessed: 06-Apr-2025].
