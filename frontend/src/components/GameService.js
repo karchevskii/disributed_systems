@@ -1,10 +1,10 @@
 class GameService {
   constructor(apiBaseUrl, gameApiUrl, onSocketMessage, onError) {
     // Use environment variables with fallbacks
-    this.apiBaseUrl = process.env.VUE_APP_USERS_SERVICE_URL || "https://ttt.karchevskii.com/users-service";
-    this.gameApiUrl = process.env.VUE_APP_GAME_SERVICE_URL || "https://ttt.karchevskii.com/game-service";
-    this.gameHistoryApiUrl = process.env.VUE_APP_HISTORY_SERVICE_URL || "https://ttt.karchevskii.com/history-service";
-    this.wsHost = process.env.VUE_APP_WS_HOST || "ttt.karchevskii.com/game-service";
+    this.apiBaseUrl = window._env_?.VUE_APP_USERS_SERVICE_URL || "https://ttt.karchevskii.com/users-service";
+    this.gameApiUrl = window._env_?.VUE_APP_GAME_SERVICE_URL || "https://ttt.karchevskii.com/game-service";
+    this.gameHistoryApiUrl = window._env_?.VUE_APP_HISTORY_SERVICE_URL || "https://ttt.karchevskii.com/history-service";
+    this.wsHost = window._env_?.VUE_APP_WS_HOST || "ttt.karchevskii.com/game-service";
     
     this.onSocketMessage = onSocketMessage;
     this.onError = onError;
