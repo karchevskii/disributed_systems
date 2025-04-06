@@ -534,6 +534,9 @@ export default {
         // Start the game
         this.startGame(gameId, playerSymbol, 'human');
         
+        // Set status to active since we're joining
+        this.status = 'active';
+        
         this.showOpenGamesDialog = false;
         this.showNotification('Successfully joined game!', 'success');
       } catch (error) {
@@ -579,7 +582,7 @@ export default {
     
     async joinGame() {
       if (!this.joinGameCode) return;
-      
+  
       try {
         // Clean up input (may be full URL or just code)
         let gameId = this.joinGameCode.trim();
@@ -606,6 +609,9 @@ export default {
         // Initialize the game
         this.startGame(gameId, playerSymbol, gameData.type === 'bot' ? 'bot' : 'human');
         
+        // When joining an existing game, we're always active
+        this.status = 'active';
+        
         this.showNotification(`Joined game successfully`, 'success');
       } catch (error) {
         console.error('Error joining game:', error);
@@ -630,17 +636,18 @@ export default {
         // Update the game state
         const gameData = data.game;
         
-        // Update game status and show notification if needed
+        // Update game status
         const previousStatus = this.status;
         this.status = gameData.status;
         
-        // Show notification when game becomes active (opponent joined)
-        if (previousStatus === 'waiting' && gameData.status === 'active' && this.gameMode === 'human') {
+        // Show notification when a player has joined (only for the game creator)
+        // Only show this if we're the creator, not the joiner
+        if (previousStatus === 'waiting' && gameData.status === 'active' && 
+            this.gameMode === 'human' && gameData.created_by === this.userId) {
           this.showNotification('Opponent has joined! Game is starting.', 'success');
         }
-
+        
         // Update the board
-        // Convert backend's flat array to frontend's 2D array
         for (let i = 0; i < 3; i++) {
           for (let j = 0; j < 3; j++) {
             const index = i * 3 + j;
