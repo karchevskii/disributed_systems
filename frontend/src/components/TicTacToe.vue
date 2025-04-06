@@ -624,12 +624,6 @@ export default {
         // Update the game state
         const gameData = data.game;
         
-        // Debug logs
-        console.log("Game data received:", gameData);
-        console.log("Current player ID from server:", gameData.current_player);
-        console.log("My user ID:", this.userId);
-        console.log("My player symbol:", this.playerSymbol);
-        
         // Update the board
         // Convert backend's flat array to frontend's 2D array
         for (let i = 0; i < 3; i++) {
@@ -652,15 +646,11 @@ export default {
         // Update current player
         if (gameData.current_player === this.userId) {
           this.currentPlayer = this.playerSymbol;
-          console.log("Setting currentPlayer to my symbol:", this.playerSymbol);
         } else if (gameData.current_player === 'bot') {
           this.currentPlayer = this.playerSymbol === 'X' ? 'O' : 'X';
-          console.log("Setting currentPlayer for bot game");
         } else {
           this.currentPlayer = this.playerSymbol === 'X' ? 'O' : 'X';
-          console.log("Setting currentPlayer to opponent's symbol");
         }
-        console.log("Current player after update:", this.currentPlayer);
         
         // Update move count
         this.movesCount = gameData.board.filter(cell => cell !== '').length;
