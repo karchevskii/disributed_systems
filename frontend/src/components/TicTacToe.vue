@@ -267,7 +267,8 @@ export default {
       username: '',
       userId: null,
       userEmail: '',
-      
+      status: 'waiting',
+
       // Game state
       inGame: false,
       gameCode: null,
@@ -317,6 +318,11 @@ export default {
       // If we have custom status text, use that
       if (this.gameStatusText) {
         return this.gameStatusText;
+      }
+      
+      // Special case for multiplayer games in "waiting" status
+      if (this.gameMode === 'human' && this.status === 'waiting') {
+        return 'Waiting for opponent to join...';
       }
       
       if (this.gameOver) {
@@ -528,6 +534,9 @@ export default {
         // Start the game
         this.startGame(gameId, playerSymbol, 'human');
         
+        // Set status to active since we're joining
+        this.status = 'active';
+        
         this.showOpenGamesDialog = false;
         this.showNotification('Successfully joined game!', 'success');
       } catch (error) {
@@ -573,7 +582,7 @@ export default {
     
     async joinGame() {
       if (!this.joinGameCode) return;
-      
+  
       try {
         // Clean up input (may be full URL or just code)
         let gameId = this.joinGameCode.trim();
@@ -600,6 +609,9 @@ export default {
         // Initialize the game
         this.startGame(gameId, playerSymbol, gameData.type === 'bot' ? 'bot' : 'human');
         
+        // When joining an existing game, we're always active
+        this.status = 'active';
+        
         this.showNotification(`Joined game successfully`, 'success');
       } catch (error) {
         console.error('Error joining game:', error);
@@ -624,8 +636,22 @@ export default {
         // Update the game state
         const gameData = data.game;
         
+        // Store previous status before updating it
+        const previousStatus = this.status;
+        
+        // Update status right away
+        this.status = gameData.status;
+        
+        // Show notification when a player has joined (only for the game creator)
+        if (previousStatus === 'waiting' && gameData.status === 'active' && 
+            this.gameMode === 'human' && gameData.created_by === this.userId) {
+          // Use a very small timeout to ensure the notification shows at the right time
+          setTimeout(() => {
+            this.showNotification('Opponent has joined! Game is starting.', 'success');
+          }, 50);
+        }
+        
         // Update the board
-        // Convert backend's flat array to frontend's 2D array
         for (let i = 0; i < 3; i++) {
           for (let j = 0; j < 3; j++) {
             const index = i * 3 + j;
@@ -657,7 +683,18 @@ export default {
         
         // Update game status display
         this.updateGameStatusDisplay(gameData);
-      } else if (data.type === 'chat') {
+      } 
+      // Handle player connected event explicitly
+      else if (data.type === 'player_connected') {
+        console.log('Player connected event received', data);
+        
+        // If we're the creator, show notification
+        if (this.gameMode === 'human' && this.status === 'waiting') {
+          this.status = 'active'; // Immediately update status
+          this.showNotification('Opponent has joined! Game is starting.', 'success');
+        }
+      }
+      else if (data.type === 'chat') {
         // Handle chat messages
         if (this.$refs.gameChat) {
           this.$refs.gameChat.addMessage({
