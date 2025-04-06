@@ -141,38 +141,14 @@
                   <span>{{ gameStatus }}</span>
                 </v-card-subtitle>
                 
-                <!-- Game Board with Waiting Overlay -->
-                <div class="position-relative">
-                  <game-board 
-                    :board="board" 
-                    :gameOver="gameOver" 
-                    :currentPlayer="currentPlayer"
-                    :playerSymbol="playerSymbol"
-                    :gameStatus="status"
-                    @make-move="makeMove"
-                  />
-                  
-                  <!-- Overlay for waiting state -->
-                  <div v-if="gameMode === 'human' && status === 'waiting'" class="waiting-overlay">
-                    <v-progress-circular
-                      indeterminate
-                      color="primary"
-                      size="64"
-                    ></v-progress-circular>
-                    <div class="mt-4 text-center">
-                      <div class="text-h6">Waiting for opponent</div>
-                      <div class="mt-2">Share the game ID with a friend to play together!</div>
-                      <v-btn 
-                        class="mt-4" 
-                        color="primary" 
-                        @click="copyGameId"
-                      >
-                        <v-icon left>mdi-content-copy</v-icon>
-                        Copy Game ID
-                      </v-btn>
-                    </div>
-                  </div>
-                </div>
+                <!-- Game Board -->
+                <game-board 
+                  :board="board" 
+                  :gameOver="gameOver" 
+                  :currentPlayer="currentPlayer"
+                  :playerSymbol="playerSymbol"
+                  @make-move="makeMove"
+                />
                 
                 <!-- Chat Component -->
                 <game-chat
@@ -297,7 +273,6 @@ export default {
       gameCode: null,
       gameMode: null, // 'human' or 'bot'
       playerSymbol: null,
-      status: 'waiting', // Add this new property to track game status
       board: [
         ['', '', ''],
         ['', '', ''],
@@ -342,11 +317,6 @@ export default {
       // If we have custom status text, use that
       if (this.gameStatusText) {
         return this.gameStatusText;
-      }
-      
-      // Special case for multiplayer games in "waiting" status
-      if (this.gameMode === 'human' && this.status === 'waiting') {
-        return 'Waiting for opponent to join...';
       }
       
       if (this.gameOver) {
@@ -557,7 +527,6 @@ export default {
         
         // Start the game
         this.startGame(gameId, playerSymbol, 'human');
-        this.status = 'active'; // Force active status when joining an existing game
         
         this.showOpenGamesDialog = false;
         this.showNotification('Successfully joined game!', 'success');
@@ -628,9 +597,8 @@ export default {
           throw new Error('Player not found in game data');
         }
         
-        // Initialize the game (when joining, the status should already be 'active')
+        // Initialize the game
         this.startGame(gameId, playerSymbol, gameData.type === 'bot' ? 'bot' : 'human');
-        this.status = 'active'; // Force active status when joining an existing game
         
         this.showNotification(`Joined game successfully`, 'success');
       } catch (error) {
@@ -655,15 +623,6 @@ export default {
       if (data.type === 'game_state') {
         // Update the game state
         const gameData = data.game;
-        
-        // Update game status
-        const previousStatus = this.status;
-        this.status = gameData.status;
-        
-        // Show notification when a player has joined and game becomes active
-        if (previousStatus === 'waiting' && gameData.status === 'active' && this.gameMode === 'human') {
-          this.showNotification('Opponent has joined! Game is starting.', 'success');
-        }
         
         // Update the board
         // Convert backend's flat array to frontend's 2D array
@@ -698,9 +657,6 @@ export default {
         
         // Update game status display
         this.updateGameStatusDisplay(gameData);
-      } else if (data.type === 'player_connected') {
-        // Handle player connected message
-        this.showNotification(`Player ${data.player.toUpperCase()} has joined the game!`, 'success');
       } else if (data.type === 'chat') {
         // Handle chat messages
         if (this.$refs.gameChat) {
@@ -769,10 +725,6 @@ export default {
       this.playerSymbol = playerSymbol;
       this.gameMode = gameMode;
       this.gameStatusText = null;
-      
-      // Set the initial status - for human games, we start in 'waiting'
-      // For bot games, we start as 'active'
-      this.status = gameMode === 'human' ? 'waiting' : 'active';
       
       // Connect to WebSocket
       this.gameService.connectToGameSocket(gameId);
@@ -896,7 +848,6 @@ export default {
       this.winner = null;
       this.gameOver = false;
       this.movesCount = 0;
-      this.status = 'waiting'; // Reset status
       
       // Clear chat messages if chat component exists
       if (this.$refs.gameChat) {
@@ -916,24 +867,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.position-relative {
-  position: relative;
-}
-
-.waiting-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(255, 255, 255, 0.8);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 10;
-  padding: 20px;
-}
-</style>
