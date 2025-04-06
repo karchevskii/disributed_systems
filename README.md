@@ -19,7 +19,7 @@ Die Applikation basiert auf einer **Microservice-Architektur**, ausgeführt in e
 ### 1.1 Systemkomponenten und Interaktion
 
 ```mermaid
-graph TD
+graph TD;
   subgraph Client
     A[Browser / Frontend (Vue.js)]
   end
