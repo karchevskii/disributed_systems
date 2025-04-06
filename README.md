@@ -1,4 +1,3 @@
-
 # Distributed Tictactoe
 
 Die Implementierung des Tic-Tac-Toe-Spiels ist eine verteilte Webapplikation. Es besteht die Möglichkeit, einen Benutzeraccount zu erstellen (OAuth2.0 via GitHub) oder als Gast zu spielen. Zwei Spielmodi stehen zur Verfügung: gegen einen Bot oder im Multiplayer-Modus.
@@ -26,21 +25,30 @@ graph TD
   end
 
   subgraph Kubernetes Cluster
-    A -->|HTTP+WebSocket| B[Ingress / Istio Gateway]
-    B --> C[Users Service]
-    B --> D[Game Service]
-    B --> E[Game History Service]
-    D <--> R[Redis Cluster]
-    E --> P1[(PostgreSQL Cluster)]
-    C --> P2[(PostgreSQL Cluster)]
-    D -->|Stream Events| R
-    E -->|Stream Consumer| R
+    B[Ingress / Istio Gateway]
+    C[Users Service]
+    D[Game Service]
+    E[Game History Service]
+    R[Redis Cluster]
+    P1[(PostgreSQL Cluster)]
+    P2[(PostgreSQL Cluster)]
   end
+
+  A -->|HTTP+WebSocket| B
+  B --> C
+  B --> D
+  B --> E
+  D <--> R
+  E --> P1
+  C --> P2
+  D -->|Stream Events| R
+  E -->|Stream Consumer| R
 ```
 
 ### 1.2 Anforderungen
 
 **Funktionale Anforderungen:**
+
 - Registrierung/Login via GitHub (OAuth2.0)
 - Gast-Login
 - Matchmaking (Bot/Multiplayer)
@@ -48,6 +56,7 @@ graph TD
 - Speicherung und Abfrage gespielter Spiele
 
 **Nichtfunktionale Anforderungen:**
+
 - Horizontale Skalierung
 - Echtzeitfähigkeit (WebSocket)
 - Fehlertoleranz (Redis Streams, mehrere Instanzen)
@@ -75,12 +84,14 @@ graph TD
 #### Backend-Services
 
 - **Users-Service**
+
   - FastAPI + OAuth2.0 (GitHub)
   - JWT in HTTP-only Cookies
   - Validierung durch andere Services via `/validate`
   - Datenhaltung in PostgreSQL
 
 - **Game-Service**
+
   - FastAPI + WebSockets
   - Game-Logik, Spielstart, Spielzug
   - Zustandsdaten in Redis (Hash)
@@ -122,12 +133,12 @@ graph TD
 
 ### 2.2 Herausforderungen und Lösungen
 
-| Herausforderung                               | Lösung                                                 |
-|----------------------------------------------|--------------------------------------------------------|
-| Synchronisation Game-Instanzen               | Zentrale Redis-Zustandsverwaltung                      |
-| Token-Validierung zwischen Services          | Users-Service `/validate` API                          |
-| Fehlertoleranz bei Event-Verarbeitung        | Redis Streams + Consumer Group                         |
-| WebSocket-Kompatibilität mit Ingress & Istio | Anpassung der Istio Gateway + VirtualService Settings  |
+| Herausforderung                              | Lösung                                                |
+| -------------------------------------------- | ----------------------------------------------------- |
+| Synchronisation Game-Instanzen               | Zentrale Redis-Zustandsverwaltung                     |
+| Token-Validierung zwischen Services          | Users-Service `/validate` API                         |
+| Fehlertoleranz bei Event-Verarbeitung        | Redis Streams + Consumer Group                        |
+| WebSocket-Kompatibilität mit Ingress & Istio | Anpassung der Istio Gateway + VirtualService Settings |
 
 ---
 
@@ -142,11 +153,11 @@ graph TD
 
 ### 3.2 Größte Herausforderungen
 
-| Herausforderung | Lösung |
-|-----------------|--------|
-| Verteilte Zustände | Redis-Zentralisierung |
-| OAuth2-Testing lokal | Mocks für GitHub-Login |
-| Asynchrone Events | Redis Streams + Retry |
+| Herausforderung        | Lösung                           |
+| ---------------------- | -------------------------------- |
+| Verteilte Zustände     | Redis-Zentralisierung            |
+| OAuth2-Testing lokal   | Mocks für GitHub-Login           |
+| Asynchrone Events      | Redis Streams + Retry            |
 | Echtzeit-Kommunikation | WebSockets mit korrektem Routing |
 
 ### Fazit
@@ -157,7 +168,7 @@ Das Projekt zeigt, wie sich verteilte Systeme in einem modernen Cloud-Native-Sta
 
 ## Literaturverzeichnis
 
-[1] A. S. Tanenbaum and M. van Steen, *Distributed Systems: Principles and Paradigms*, 2nd ed. Upper Saddle River, NJ, USA: Pearson, 2007.  
+[1] A. S. Tanenbaum and M. van Steen, _Distributed Systems: Principles and Paradigms_, 2nd ed. Upper Saddle River, NJ, USA: Pearson, 2007.  
 [2] Redis Authors, “Redis Streams,” [Online]. Available: https://redis.io/docs/data-types/streams/. [Accessed: 06-Apr-2025].  
 [3] IETF, “The OAuth 2.0 Authorization Framework,” RFC 6749, Oct. 2012. [Online]. Available: https://tools.ietf.org/html/rfc6749  
-[4] A. S. Tanenbaum and M. van Steen, *Distributed Systems*, Chapter 8: Communication in Distributed Systems.
+[4] A. S. Tanenbaum and M. van Steen, _Distributed Systems_, Chapter 8: Communication in Distributed Systems.
