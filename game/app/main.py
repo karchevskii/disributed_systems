@@ -416,11 +416,11 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
         )
 
         # Initial game state
-        await websocket.send_json({
+        await manager.broadcast({
             "type": "game_state",
             "game": game_data
-        })
-        logger.debug(f"Sent initial game state to {user['id']}")
+        }, game_id)
+        logger.debug(f"Sent initial game state")
 
         # Multiplayer game loop
         if game_data["type"] == "multiplayer":
@@ -918,16 +918,12 @@ async def join_game(game_id: str, user=Depends(get_current_user)):
     # Join as another player
     if game_data["players"]["x"] is None:
         game_data["players"]["x"] = user["id"]
+        game_data["current_player"] = game_data["players"]["x"]
     else:  # Must be joining as player "o"
         game_data["players"]["o"] = user["id"]
-
-    # Determine whose turn it should be based on number of moves
-    num_moves = len(game_data["moves"])
-
-    if num_moves % 2 == 0:
-        game_data["current_player"] = game_data["players"]["x"]
-    else:
-        game_data["current_player"] = game_data["players"]["o"]
+        num_moves = len(game_data["moves"])
+        if num_moves % 2 != 0:
+            game_data["current_player"] = game_data["players"]["o"]
 
     # Set game to active now that both players are joined
     game_data["status"] = "active"
