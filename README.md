@@ -21,7 +21,7 @@ Die Applikation basiert auf einer **Microservice-Architektur**, ausgeführt in e
 ```mermaid
 graph TD;
   subgraph Client
-    A[Browser / Frontend (Vue.js)]
+    A[Browser / Frontend Vue.js]
   end
 
   subgraph Kubernetes Cluster
